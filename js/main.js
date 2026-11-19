@@ -24,20 +24,45 @@
   $('bestMenu').textContent = best;
 
   // ------------------------------------------------------------ layout
-  const stage = $('stage'), controls = $('controls');
+  const app = $('app'), stage = $('stage'), controls = $('controls');
+  const mobileLayout = matchMedia('(pointer: coarse), (any-pointer: coarse), (max-width: 700px), (max-width: 960px) and (max-height: 600px)');
+  let touchDetected = 'ontouchstart' in window;
+  let previousPortrait = null;
   function layout() {
-    const touch = document.body.classList.contains('touch-on');
-    const availW = window.innerWidth;
-    const availH = window.innerHeight - (touch ? 0 : controls.offsetHeight + 14);
-    const w = Math.max(320, Math.min(availW, availH * (16 / 9)));
-    const h = w * 9 / 16;
-    stage.style.width = w + 'px'; stage.style.height = h + 'px';
+    const touch = touchDetected || mobileLayout.matches;
+    document.body.classList.toggle('touch-on', touch);
+    const viewport = window.visualViewport;
+    const availW = viewport ? viewport.width : window.innerWidth;
+    const viewportH = viewport ? viewport.height : window.innerHeight;
+    app.style.width = availW + 'px';
+    app.style.height = viewportH + 'px';
+    const availH = Math.max(1, viewportH - (touch ? 0 : controls.offsetHeight + 14));
+    const w = Math.max(1, Math.min(availW, availH * (C.W / C.H)));
+    const h = w * C.H / C.W;
+    stage.style.width = (touch ? availW : w) + 'px';
+    stage.style.height = (touch ? availH : h) + 'px';
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
     stage.style.setProperty('--s', w / 960);
     renderer.resize(w, h);
+    // Rotation never leaves an active movement button held or a run playing out of view.
+    const portrait = availH > availW;
+    if (previousPortrait !== null && previousPortrait !== portrait) {
+      Input.clearHeld();
+      Input.clearEdges();
+      document.querySelectorAll('#touch .down').forEach((button) => button.classList.remove('down'));
+    }
+    previousPortrait = portrait;
+    if (touch && portrait) setPaused(true);
   }
   window.addEventListener('resize', layout);
-  function enableTouch() { if (!document.body.classList.contains('touch-on')) { document.body.classList.add('touch-on'); layout(); } }
-  if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch-on');
+  window.visualViewport?.addEventListener('resize', layout);
+  screen.orientation?.addEventListener('change', () => requestAnimationFrame(layout));
+  mobileLayout.addEventListener('change', layout);
+  function enableTouch() {
+    touchDetected = true;
+    if (!document.body.classList.contains('touch-on')) layout();
+  }
   window.addEventListener('touchstart', enableTouch, { passive: true, once: true });
   Input.bindTouch($('touch'));
   if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Bungee'); document.fonts.load('600 16px Fredoka'); }
@@ -98,7 +123,7 @@
     for (const k in screens) screens[k].classList.toggle('hidden', k !== name);
     const playing = mode === 'playing' || mode === 'paused';
     el.hud.classList.toggle('hidden', !(playing || mode === 'over'));
-    document.body.classList.toggle('hud-off', mode === 'menu');
+    document.body.classList.toggle('hud-off', mode !== 'playing');
   }
 
   function startGame() {
