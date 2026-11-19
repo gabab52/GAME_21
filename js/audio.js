@@ -97,6 +97,12 @@
     stroke() { noise({ t: 0.18, f: 1500, f2: 400, filter: 'lowpass', vol: 0.22 }); tone({ f: 260, f2: 420, t: 0.12, type: 'sine', vol: 0.14 }); },
     pop() { tone({ f: 500, f2: 1200, t: 0.1, type: 'sine', vol: 0.3 }); noise({ t: 0.12, f: 5000, filter: 'highpass', vol: 0.2 }); [12, 19, 24].forEach((s, i) => tone({ f: N(s), t: 0.08, type: 'square', vol: 0.12, delay: 0.08 + i * 0.05 })); },
     pause() { tone({ f: N(7), t: 0.08, type: 'square', vol: 0.14 }); },
+    // RSE meteorite: alarm, falling whistle, impact
+    meteorWarn() { for (let i = 0; i < 4; i++) tone({ f: i % 2 ? 620 : 880, t: 0.1, type: 'square', vol: 0.18, delay: i * 0.12 }); tone({ f: 1500, f2: 260, t: 1.0, type: 'sine', vol: 0.16, delay: 0.3 }); },
+    meteorBoom() { noise({ t: 0.7, f: 1800, f2: 70, vol: 0.8 }); tone({ f: 110, f2: 30, t: 0.6, type: 'sawtooth', vol: 0.5 }); tone({ f: 60, f2: 25, t: 0.5, type: 'sine', vol: 0.5, delay: 0.02 }); },
+    // Matita: quick pencil-scribble sound
+    scribble() { for (let i = 0; i < 6; i++) noise({ t: 0.05, f: 3200 + (i % 2) * 1400, filter: 'bandpass', vol: 0.22, delay: i * 0.055 }); tone({ f: N(19), t: 0.12, type: 'triangle', vol: 0.2, delay: 0.34 }); },
+    pierce() { noise({ t: 0.1, f: 2600, f2: 900, filter: 'bandpass', vol: 0.3 }); tone({ f: 900, f2: 300, t: 0.1, type: 'square', vol: 0.12 }); },
   };
 
   function play(name) {
@@ -105,12 +111,15 @@
     if (fn) fn();
   }
 
-  function say(text) {
+  /** Italian voice line. opts: { rate, pitch, soft } — `soft` skips the line if another one is still being spoken (so rapid hits don't cut each other off). */
+  function say(text, opts) {
     try {
       if (muted || !window.speechSynthesis) return;
+      const o = opts || {};
+      if (o.soft && window.speechSynthesis.speaking) return;
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'it-IT'; u.rate = 0.85; u.pitch = 0.5; u.volume = 1;
-      window.speechSynthesis.cancel();
+      u.lang = 'it-IT'; u.rate = o.rate || 0.85; u.pitch = o.pitch == null ? 0.5 : o.pitch; u.volume = 1;
+      if (!o.soft) window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
     } catch (_) {}
   }

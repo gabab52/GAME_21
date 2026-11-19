@@ -18,7 +18,7 @@
     constructor(world) {
       this.w = world;
       this.gap = 380;
-      this.cool = { enemy: 9, power: 13, bomb: 22, heart: 40, water: 26 };
+      this.cool = { enemy: 9, power: 13, bomb: 22, heart: 40, water: 26, meteor: 30 };
       this.patterns = this.build();
     }
 
@@ -195,12 +195,25 @@
           },
         },
 
+        // ---- RSE meteorite: a rock with "RSE" on it comes down on the hero's position; dodge it sideways
+        {
+          name: 'meteor',
+          // (not held back by a pending swim passage: a meteor is a quick event and never overlaps the pool itself)
+          weight: (w) => (w.t > 28 && noWater(w) && sp.cool.meteor <= 0 && w.meteors.length === 0 && !w.player.dead
+            && !w.enemies.some((e) => !e.dead && (e.state === 'windup' || e.state === 'lunge')) ? 2.6 + 2 * w.diff : 0),
+          run(x0, w) {
+            w.spawnMeteor();
+            sp.cool.meteor = U.rand(13, 20) * (1 - 0.35 * w.diff);
+            return 140;
+          },
+        },
+
         // ---- power-ups and consumables
         {
           name: 'powerUp',
           weight: (w) => (!w.power.type && noWater(w) && !waterDue(w) && sp.cool.power <= 0 && w.t > 10 ? 2.2 : 0),
           run(x0, w) {
-            const kind = U.wpick([{ w: 0.34, k: 'bike' }, { w: 0.28, k: 'skis' }, { w: 0.2, k: 'sword' }, { w: 0.18, k: 'shield' }]).k;
+            const kind = U.wpick([{ w: 0.3, k: 'bike' }, { w: 0.25, k: 'skis' }, { w: 0.17, k: 'sword' }, { w: 0.16, k: 'shield' }, { w: 0.22, k: 'pencil' }]).k;
             const pw = 170; sp.plat(x0 + 70, 96, pw);
             sp.item(kind, x0 + 70 + pw / 2, GY - 96 - 34);
             sp.arc(x0 + 20, 4, 30, GY - 40, 50);

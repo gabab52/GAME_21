@@ -171,10 +171,11 @@
       case 'heart_pick': Sfx.play('heart'); fx.text(e.x, e.y - 20, '+1 ♥', { color: '#ff6b8b', size: 20, life: 0.9 }); fx.burst(e.x, e.y, { n: 10, color: ['#ff4d6d', '#ffc2d1'], min: 60, max: 200, life: 0.6, size: 4, grav: -50 }); break;
       case 'power_pick': Sfx.play('pickup'); fx.ring(e.x, e.y, C.POWER[e.kind].color, 12, 0.5); break;
       case 'power_start': {
-        Sfx.play('power'); fx.doFlash(C.POWER[e.kind].color, 0.35);
-        const label = { bike: 'VESPA!', skis: 'SKIS!', sword: 'SWORD!', shield: 'SCUDETTO!' }[e.kind];
-        banner(label, e.kind === 'skis' ? 'teal' : e.kind === 'shield' ? 'gold' : '');
+        Sfx.play(e.kind === 'pencil' ? 'scribble' : 'power'); fx.doFlash(C.POWER[e.kind].color, 0.35);
+        const label = { bike: 'VESPA!', skis: 'SKIS!', sword: 'SWORD!', shield: 'SCUDETTO!', pencil: 'MATITA!' }[e.kind];
+        banner(label, e.kind === 'skis' ? 'teal' : e.kind === 'shield' ? 'gold' : e.kind === 'pencil' ? 'pink' : '');
         if (e.kind === 'shield') fx.text(p.x, p.y - 100, 'Forza Roma!', { color: '#f7c52b', size: 22, life: 1.4 });
+        if (e.kind === 'pencil') fx.text(p.x + 10, p.y - 100, 'Buca tutto!', { color: '#ff9ec4', size: 22, life: 1.4 });
         fx.burst(p.x, p.y - 30, { n: 22, color: [C.POWER[e.kind].color, '#fff'], shape: 'star', min: 80, max: 320, life: 0.7, size: 5, grav: 100 });
         if (e.kind === 'bike') Sfx.setEngine(true, world.speedMul);
         break;
@@ -205,10 +206,13 @@
       case 'enemy_hit': {
         fx.burst(e.x, e.y, { n: 7, color: ['#ffd166', '#fff'], shape: 'star', min: 80, max: 240, life: 0.4, size: 5, grav: 200 });
         fx.doShake(4); hitstop = Math.max(hitstop, 0.04);
-        if (e.kind === 'oldman') { Sfx.play('grumble'); const en = world.enemies.find((o) => o.kind === 'oldman' && !o.dead); if (en && en.hits === 1) fx.parts.push({ x: en.x, y: en.y - 52, vx: 120, vy: -380, life: 1.2, max: 1.2, size: 8, color: '#000', shape: 'glasses', grav: 1200, drag: 0, rot: 0, vr: 7 }); }
+        if (e.kind === 'oldman') Sfx.play('grumble');
         break;
       }
-      case 'speech': fx.bubble(e.x, e.y, e.text, 1.3); break;
+      case 'speech':
+        fx.bubble(e.x, e.y, e.text, 1.3, e.who, e.shout);
+        if (e.who === 'oldman') Sfx.say(e.text, { rate: 1.08, pitch: 0.8, soft: true }); // his catchphrases, out loud
+        break;
       case 'hiss': Sfx.play('hiss'); fx.text(e.x, e.y - 30, 'HSSS!', { color: '#c6ef4a', size: 15, life: 0.6 }); break;
       case 'kill': {
         hitstop = Math.max(hitstop, 0.07); fx.doShake(e.src === 'bomb' ? 8 : 9);
@@ -228,7 +232,29 @@
         break;
       }
       case 'stomp': Sfx.play('stomp'); fx.text(e.x, e.y - 24, 'BOING!', { color: '#fff', size: 18, life: 0.6 }); break;
-      case 'smash': Sfx.play('smash'); fx.doShake(5); fx.burst(e.x, e.y, { n: 12, color: e.kind === 'cone' ? ['#ff8a3d', '#fff'] : ['#3a86ff', '#ef476f', '#06d6a0', '#fff'], shape: 'sq', size: 6, min: 100, max: 340, life: 0.7, grav: 700 }); break;
+      case 'smash':
+        Sfx.play(e.src === 'pencil' ? 'pierce' : 'smash'); fx.doShake(e.src === 'pencil' ? 3 : 5);
+        fx.burst(e.x, e.y, { n: 12, color: e.kind === 'cone' ? ['#ff8a3d', '#fff'] : e.kind === 'buoy' ? ['#ff4d4d', '#fff'] : ['#3a86ff', '#ef476f', '#06d6a0', '#fff'], shape: 'sq', size: 6, min: 100, max: 340, life: 0.7, grav: 700 });
+        if (e.src === 'pencil') { // pencil shavings + graphite dust
+          fx.burst(e.x, e.y, { n: 8, color: ['#ffd23f', '#f2c999', '#2b2f3f'], shape: 'chip', size: 6, min: 120, max: 360, life: 0.7, grav: 500 });
+          fx.text(e.x, e.y - 30, 'BUCATO!', { color: '#ff9ec4', size: 17, life: 0.7 });
+        }
+        break;
+      // RSE meteorite
+      case 'meteor_warn': Sfx.play('meteorWarn'); banner('METEORITE!', 'red'); fx.text(e.x, e.y - 40, '⚠ RSE ⚠', { color: '#ff5c6c', size: 20, life: 1.1 }); break;
+      case 'meteor_impact':
+        Sfx.play('meteorBoom'); fx.doShake(e.ground ? 20 : 12); hitstop = Math.max(hitstop, 0.06);
+        if (e.ground) fx.doFlash('#ff9a3d', 0.5);
+        for (let i = 0; i < 3; i++) fx.ring(e.x, e.y, i % 2 ? '#ffd166' : '#ff6b3d', 18 + i * 20, 0.45 + i * 0.1);
+        fx.burst(e.x, e.y, { n: 30, color: ['#ff6b3d', '#ffd166', '#fff', '#ffb703'], shape: 'star', size: 7, min: 140, max: 560, life: 0.9, grav: 400 });
+        fx.burst(e.x, e.y, { n: 12, color: ['#5f4a3a', '#3a2a22'], shape: 'sq', size: 7, min: 120, max: 460, life: 0.9, grav: 900 });
+        fx.burst(e.x, e.y, { n: 14, color: 'rgba(50,40,45,0.7)', shape: 'smoke', size: 12, min: 40, max: 220, life: 1.1, grav: -50, grow: 30 });
+        break;
+      case 'meteor_smash':
+        Sfx.play('smash'); fx.doShake(8);
+        fx.burst(e.x, e.y, { n: 18, color: ['#5f4a3a', '#ff9a3d', '#ffd166'], shape: 'sq', size: 6, min: 120, max: 420, life: 0.7, grav: 700 });
+        fx.text(e.x, e.y - 30, '+' + C.SCORE.meteor + ' RSE!', { color: '#ffd166', size: 20, life: 0.9 });
+        break;
       case 'hurt':
         Sfx.play('hurt'); fx.doShake(e.fatal ? 18 : 12); fx.doFlash('#ff2e4d', 0.55); hitstop = Math.max(hitstop, e.fatal ? 0.15 : 0.1);
         fx.burst(e.x, e.y, { n: 12, color: ['#ff4d6d', '#fff', '#ffd166'], shape: 'star', size: 5, min: 120, max: 320, life: 0.6, grav: 300 });
@@ -257,8 +283,16 @@
   /** Continuous ambient effects (exhaust, snow spray, sword sparkles, running dust). */
   function ambientFx(w, dt) {
     const p = w.player, t = w.power.type;
+    // sparks and smoke behind every falling meteorite
+    for (const m of w.meteors) {
+      if (m.state !== 'fall') continue;
+      fx.burst(m.x, m.y, { n: 2, color: ['#ffb703', '#ff6b3d', 'rgba(90,70,60,0.8)'], shape: 'dot', size: 4, min: 20, max: 90, dir: Math.atan2(-m.vy, -m.vx), spread: 0.5, life: 0.45, grav: 40 });
+    }
     if (p.dead) return;
-    if (t === 'bike') {
+    if (t === 'pencil' && p.onGround && !p.swim) {
+      ambient.puff -= dt;
+      if (ambient.puff <= 0) { ambient.puff = 0.07; fx.burst(p.x + 58, p.y - 21, { n: 1, color: ['#2b2f3f', '#8c8f9c'], shape: 'dot', size: 2.4, min: 20, max: 80, dir: -0.4, spread: 0.6, life: 0.4, grav: 200 }); }
+    } else if (t === 'bike') {
       ambient.puff -= dt;
       if (ambient.puff <= 0) { ambient.puff = 0.045; fx.burst(p.x - 46, p.y - 13, { n: 1, color: 'rgba(210,214,224,0.8)', shape: 'smoke', size: 5, min: 20, max: 70, dir: Math.PI, spread: 0.3, life: 0.45, grav: -30, grow: 14 }); }
       Sfx.setEngine(true, w.speedMul);
@@ -344,12 +378,18 @@
     if (params.has('swim')) { world.water.push({ x: 20, w: 1500 }); step(parseFloat(params.get('swim')) || 1.0); }
     if (params.has('oldman')) { world.spawnOldMan(); step(parseFloat(params.get('oldman')) || 2.6); }
     if (params.has('cat')) { world.spawnCat(); step(parseFloat(params.get('cat')) || 1.2); }
+    if (params.has('meteor')) { world.spawnMeteor(); step(parseFloat(params.get('meteor')) || 0.6); }
     if (params.has('bomb')) {
       world.spawnOldMan(); world.spawnCat(); step(2.4);
       world.bombs = 1; step(1 / 60, { left: false, right: false, down: false, jumpHeld: false, jumpPressed: false, throwPressed: false, bombPressed: true });
       step(parseFloat(params.get('bomb')) || 0.55);
     }
     fx.reset();
+    // &hit: Francone takes a paper right now (shows his speech bubble)
+    if (params.has('hit')) {
+      const old = world.enemies.find((o) => o.kind === 'oldman' && !o.dead);
+      if (old) { world.damageEnemy(old, 1, 'paper'); const evs = world.events; world.events = []; evs.forEach(handle); step(0.15); fx.bubbles.forEach((b) => (b.life = 99)); }
+    }
   }
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();

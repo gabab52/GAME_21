@@ -81,11 +81,68 @@ test('SCUDETTO: hurt() is a no-op, lasts 10s, then ends with grace period', () =
   const w = fresh(); w.startPower('shield'); w.hurt(0); const h = w.hearts; run(w, 9.5); const still = w.power.type === 'shield'; run(w, 0.7);
   return (h === 3 && still && w.power.type === null && w.player.invuln > 0.2) || `h=${h} still=${still} power=${w.power.type}`;
 });
-test('SCUDETTO appears in the power-up pool', () => {
+test('SCUDETTO and MATITA appear in the power-up pool', () => {
   const w = fresh(); const seen = new Set(); const sp = w.spawner;
   const pat = sp.patterns.find((p) => p.name === 'powerUp'); w.t = 30;
-  for (let i = 0; i < 200; i++) { w.items.length = 0; sp.cool.power = 0; pat.run(1000, w, sp); w.items.forEach((it) => seen.add(it.kind)); }
-  return (seen.has('shield') && seen.has('bike') && seen.has('sword') && seen.has('skis')) || [...seen].join();
+  for (let i = 0; i < 300; i++) { w.items.length = 0; sp.cool.power = 0; pat.run(1000, w, sp); w.items.forEach((it) => seen.add(it.kind)); }
+  return (seen.has('shield') && seen.has('bike') && seen.has('sword') && seen.has('skis') && seen.has('pencil')) || [...seen].join();
+});
+test('FRANCONE: tall and lanky hitbox (taller than the hero, narrower than before)', () => {
+  const w = fresh(); const e = w.spawnOldMan(); return (e.h >= 90 && e.w <= 40 && e.h > w.player.h * 1.4) || `w=${e.w} h=${e.h}`;
+});
+test('FRANCONE: says "CAZZO RIDI" then "LE DERIVATE" alternately while hit, incl. the killing blow', () => {
+  const w = fresh(); w.ammo = 8; const e = w.spawnOldMan(); e.x = 700; e.state = 'stalk'; e.anchor = 700; e.next = 999;
+  const said = []; run(w, 3, (i) => { w.events.forEach((ev) => { if (ev.type === 'speech') said.push(ev.text); }); w.events.length = 0; return P({ throwPressed: i % 15 === 0 }); });
+  return (e.dead && said.join('|') === 'CAZZO RIDI|LE DERIVATE|CAZZO RIDI|LE DERIVATE') || `dead=${e.dead} said=${said.join('|')}`;
+});
+test('METEOR: aimed at the hero, warns first, hurts a hero who stands still (1 heart), then is gone', () => {
+  const w = fresh(); const ev = []; const m = w.spawnMeteor(w.player.x);
+  run(w, 2.2, () => { w.events.forEach((e) => ev.push(e.type)); w.events.length = 0; return NO; });
+  return (w.hearts === 2 && ev[0] === 'meteor_warn' && ev.includes('meteor_impact') && ev.includes('hurt') && w.meteors.length === 0 && Math.abs(m.tx - 170) < 1) || `hearts=${w.hearts} ev=${[...new Set(ev)]} left=${w.meteors.length}`;
+});
+test('METEOR: can be dodged by stepping aside (no heart lost)', () => {
+  const w = fresh(); w.spawnMeteor(w.player.x); let dir = 1;
+  run(w, 2.2, (i) => P({ right: i < 40 })); // runs right for 0.67s, ~200px away from the target
+  return (w.hearts === 3 && w.meteors.length === 0) || `hearts=${w.hearts} meteors=${w.meteors.length} x=${w.player.x.toFixed(0)}`;
+});
+test('METEOR: the ground fireball also hurts when it lands next to a standing hero, but only briefly', () => {
+  const w = fresh(); w.spawnMeteor(w.player.x + 70); run(w, 2.2); const near = w.hearts;       // 70px away: rock misses, blast (r48 + half-width 15) misses too
+  const v = fresh(); v.spawnMeteor(v.player.x + 50); run(v, 2.2);                              // 50px away: inside the fireball
+  return (near === 3 && v.hearts === 2) || `70px=${near} 50px=${v.hearts}`;
+});
+test('METEOR: sword slices it, Vespa and scudetto shrug it off (bonus, no damage)', () => {
+  const out = ['sword', 'bike', 'shield'].map((k) => { const w = fresh(); w.startPower(k); w.spawnMeteor(w.player.x); const ev = []; run(w, 2.2, () => { w.events.forEach((e) => ev.push(e.type)); w.events.length = 0; return NO; }); return w.hearts === 3 && w.bonus >= C.SCORE.meteor && ev.includes('meteor_smash'); });
+  return out.every(Boolean) || out.join();
+});
+test('METEOR: the pencil does NOT protect from it; the bomb destroys it', () => {
+  const w = fresh(); w.startPower('pencil'); w.spawnMeteor(w.player.x); run(w, 2.2);
+  const v = fresh(); v.spawnMeteor(v.player.x); v.bombs = 1; run(v, 0.5, (i) => P({ bombPressed: i === 0 })); run(v, 2);
+  return (w.hearts === 2 && v.hearts === 3 && v.meteors.length === 0) || `pencil hearts=${w.hearts} bomb hearts=${v.hearts}`;
+});
+test('METEOR: spawns by itself in a real run (later than 28s), never in water, one at a time', () => {
+  const w = new Q.World(); let seen = 0, first = 0, bad = '', last = 0; w.hearts = 99;
+  for (let i = 0; i < 60 * 240; i++) {
+    w.update(1/60, NO); w.hearts = 99; w.player.invuln = 5;
+    w.events.forEach((e) => { if (e.type === 'meteor_warn') { seen++; if (!first) first = w.t; if (w.water.length) bad = 'in water'; } }); w.events.length = 0;
+    if (w.meteors.length > 1) bad = 'two at once';
+  }
+  return (seen >= 3 && first > 28 && !bad) || `seen=${seen} first=${first.toFixed(1)} bad=${bad}`;
+});
+test('MATITA: pierces cones, books and buoys without damage (and awards smash points), lasts 8s', () => {
+  const w = fresh(); w.startPower('pencil');
+  ['cone', 'books', 'buoy'].forEach((k, i) => w.obstacles.push({ kind: k, x: w.player.x + 40 + i * 80, y: GY, w: 30, h: 36 }));
+  const ev = []; run(w, 1.5, () => { w.events.forEach((e) => ev.push(e.type + (e.src ? ':' + e.src : ''))); w.events.length = 0; return NO; });
+  const done = w.hearts === 3 && w.obstacles.length === 0 && ev.filter((e) => e === 'smash:pencil').length === 3 && w.bonus >= 3 * C.SCORE.smash;
+  run(w, 7); return (done && w.power.type === null) || `hearts=${w.hearts} obs=${w.obstacles.length} ev=${ev} power=${w.power.type}`;
+});
+test('MATITA: reaches obstacles in front of the body (pencil box) but does not kill enemies', () => {
+  const w = fresh(); w.startPower('pencil'); w.obstacles.push({ kind: 'cone', x: w.player.x + 40, y: GY, w: 26, h: 32 });
+  w.update(1/60, NO); const smashedAhead = w.obstacles.every((o) => o.gone) && w.player.x + w.player.w / 2 < w.player.x + 40 - 1;  // gone while still 40px ahead of the hero's centre
+  const v = fresh(); v.startPower('pencil'); const c = v.spawnCat(); c.x = v.player.x + 5; v.update(1/60, NO);
+  return (smashedAhead && !c.dead && v.hearts === 2) || `ahead=${smashedAhead} catDead=${c.dead} hearts=${v.hearts}`;
+});
+test('MATITA: lost when diving into the pool', () => {
+  const w = fresh(); w.startPower('pencil'); w.water.push({ x: 0, w: 900 }); run(w, 0.3); return (w.power.type === null && w.player.swim) || `power=${w.power.type}`;
 });
 test('SWIM: touching down in a pool switches to swimming (costume event, low hitbox), leaving switches back', () => {
   const w = fresh(); w.water.push({ x: 100, w: 600 }); const ev = [];

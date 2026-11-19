@@ -183,6 +183,7 @@
       this.enemies(w, time);
       this.shots(w, time);
       this.player(w, time);
+      this.meteors(w, time);
       this.waterOverlay(w, pal, time);
       this.particles(fx);
       this.bubbles(fx);
@@ -359,7 +360,7 @@
       for (const it of w.items) {
         const bob = Math.sin(time * 3 + it.ph) * 4;
         ctx.save(); ctx.translate(it.x, it.y + bob);
-        const halo = { paper: '90,140,255', bomb: '255,90,90', heart: '255,100,140', bike: '244,162,97', skis: '76,201,240', sword: '255,209,102', shield: '240,180,41' }[it.kind];
+        const halo = { paper: '90,140,255', bomb: '255,90,90', heart: '255,100,140', bike: '244,162,97', skis: '76,201,240', sword: '255,209,102', shield: '240,180,41', pencil: '255,143,184' }[it.kind];
         const rg = ctx.createRadialGradient(0, 0, 4, 0, 0, 34);
         rg.addColorStop(0, `rgba(${halo},0.42)`); rg.addColorStop(1, `rgba(${halo},0)`);
         ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, 0, 34, 0, 7); ctx.fill();
@@ -391,7 +392,7 @@
         if (e.dead) continue;
         // little hp pips so the player can see progress
         if (e.maxHp > 1 && !(e.kind === 'oldman' && e.state === 'enter')) {
-          const n = e.maxHp, pw = 9, tw = n * pw + (n - 1) * 3, top = e.y - e.h - (e.kind === 'oldman' ? 28 : 30);
+          const n = e.maxHp, pw = 9, tw = n * pw + (n - 1) * 3, top = e.y - e.h - (e.kind === 'oldman' ? 22 : 30);
           for (let i = 0; i < n; i++) {
             ctx.fillStyle = i < e.hp ? '#ff4d6d' : 'rgba(0,0,0,0.35)';
             ctx.strokeStyle = Art.OUT; ctx.lineWidth = 1.5;
@@ -402,8 +403,8 @@
         if (e.kind === 'oldman' && e.state === 'windup') {
           const blink = Math.floor(time * 14) % 2;
           ctx.fillStyle = blink ? '#ff3b3b' : '#ffd166'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 2.5;
-          ctx.beginPath(); ctx.moveTo(e.x - 8, e.y - 122); ctx.lineTo(e.x + 20, e.y - 122); ctx.lineTo(e.x + 6, e.y - 92); ctx.closePath(); ctx.fill(); ctx.stroke();
-          ctx.fillStyle = '#1c2033'; ctx.font = '800 17px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', e.x + 6, e.y - 101);
+          ctx.beginPath(); ctx.moveTo(e.x - 8, e.y - 164); ctx.lineTo(e.x + 20, e.y - 164); ctx.lineTo(e.x + 6, e.y - 134); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#1c2033'; ctx.font = '800 17px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', e.x + 6, e.y - 143);
         }
       }
     }
@@ -422,6 +423,39 @@
         ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(s.x - 18 - i * 6, s.y - 6 + i * 6); ctx.lineTo(s.x - 34 - i * 8, s.y - 6 + i * 6); ctx.stroke(); }
         ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot); Art.paper(ctx, time, 1.3); ctx.restore();
+      }
+    }
+
+    // ================================================================= RSE meteorites
+    meteors(w, time) {
+      const ctx = this.ctx;
+      for (const m of w.meteors) {
+        if (m.state === 'fall') {
+          // target on the road: a red reticle that closes in as the rock gets nearer
+          const left = U.clamp(1 - m.t / m.T, 0, 1), pulse = 0.5 + 0.5 * Math.sin(time * 18);
+          ctx.save(); ctx.translate(m.tx, GY + 9);
+          ctx.fillStyle = `rgba(255,40,50,${0.16 + 0.3 * (1 - left) + 0.1 * pulse})`;
+          ctx.beginPath(); ctx.ellipse(0, 0, 50, 10, 0, 0, 7); ctx.fill();
+          ctx.strokeStyle = `rgba(255,80,80,${0.55 + 0.4 * pulse})`; ctx.lineWidth = 3; ctx.setLineDash([10, 7]); ctx.lineDashOffset = -time * 30;
+          ctx.beginPath(); ctx.ellipse(0, 0, 50 + 38 * left, 10 + 7 * left, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(-60, 0); ctx.lineTo(-38, 0); ctx.moveTo(38, 0); ctx.lineTo(60, 0); ctx.strokeStyle = '#ff5c6c'; ctx.lineWidth = 3; ctx.stroke();
+          ctx.restore();
+          // the rock with its flame tail
+          ctx.save(); ctx.translate(m.x, m.y);
+          ctx.save(); ctx.rotate(Math.atan2(m.vy, m.vx)); Art.meteorTrail(ctx, time + m.x * 0.01); ctx.restore();
+          ctx.rotate(Math.sin(time * 4 + m.spin) * 0.14);
+          Art.meteor(ctx, time);
+          ctx.restore();
+        } else {
+          // fireball + shockwave on the spot where it burst
+          const k = U.clamp(m.boomT / 0.5, 0, 1), r = 20 + 74 * Math.sqrt(k);
+          ctx.save(); ctx.translate(m.x, m.by);
+          const g = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r);
+          g.addColorStop(0, `rgba(255,250,210,${1 - k})`); g.addColorStop(0.45, `rgba(255,170,50,${0.9 * (1 - k)})`); g.addColorStop(1, 'rgba(255,70,30,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+          ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - k)})`; ctx.lineWidth = 5 * (1 - k) + 1; ctx.beginPath(); ctx.ellipse(0, 14, r * 1.5, r * 0.28, 0, 0, 7); ctx.stroke();
+          ctx.restore();
+        }
       }
     }
 
@@ -466,7 +500,7 @@
           Art.heroSwim(ctx, { t: p.animT, expr: expr === 'focus' ? 'normal' : expr, throwP });
           if (type === 'sword') { ctx.save(); ctx.translate(32, -22); ctx.rotate(-0.2 + Math.sin(time * 9) * 0.15); Art.sword(ctx, 44, 1, time); ctx.restore(); }
         } else {
-          Art.hero(ctx, { t: p.animT, mode: type === 'skis' ? 'skis' : type === 'sword' ? 'sword' : 'run', air: !p.onGround, vy: p.vy, expr, blink, throwP, raise, runRate: 11 + w.scroll / 70 });
+          Art.hero(ctx, { t: p.animT, mode: type === 'skis' ? 'skis' : type === 'sword' ? 'sword' : 'run', air: !p.onGround, vy: p.vy, expr, blink, throwP, raise, pencil: type === 'pencil', runRate: 11 + w.scroll / 70 });
         }
       }
       ctx.restore();
@@ -518,7 +552,8 @@
           case 'ring': ctx.lineWidth = 4 * a + 1; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.stroke(); break;
           case 'line': ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.06, p.y - p.vy * 0.06); ctx.stroke(); break;
           case 'smoke': ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill(); break;
-          case 'glasses': ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.lineWidth = 2; ctx.strokeStyle = Art.OUT; ctx.beginPath(); ctx.arc(-6, 0, 5, 0, 7); ctx.arc(6, 0, 5, 0, 7); ctx.moveTo(-1, 0); ctx.lineTo(1, 0); ctx.stroke(); ctx.restore(); break;
+          case 'glasses': ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.lineWidth = 2; ctx.strokeStyle = Art.OUT; ctx.fillStyle = '#0f1018'; ctx.beginPath(); ctx.arc(-6.5, 0, 5.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(6.5, 0, 5.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-1, -1); ctx.lineTo(1, -1); ctx.stroke(); ctx.restore(); break;
+          case 'chip': ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.beginPath(); ctx.moveTo(-p.size, -p.size * 0.4); ctx.lineTo(p.size, 0); ctx.lineTo(-p.size, p.size * 0.4); ctx.closePath(); ctx.fill(); ctx.restore(); break;
           default: ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill();
         }
       }
@@ -542,14 +577,17 @@
       for (const b of fx.bubbles) {
         ctx.save();
         ctx.globalAlpha = U.clamp(b.life / 0.3, 0, 1);
-        ctx.font = '700 15px Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center';
-        const tw = ctx.measureText(b.str).width + 20;
-        const x = U.clamp(b.x, tw / 2 + 6, C.W - tw / 2 - 6), y = b.y;
-        ctx.fillStyle = '#fff'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 2.4;
-        Art.rr(ctx, x - tw / 2, y - 24, tw, 30, 12); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(b.x - 6, y + 5); ctx.lineTo(b.x - 14, y + 17); ctx.lineTo(b.x + 6, y + 5); ctx.fillStyle = '#fff'; ctx.fill();
+        // shout = Francone yelling: big red capitals in a cream bubble that jolts a little
+        const shout = !!b.shout, bh = shout ? 40 : 30;
+        ctx.font = shout ? '700 22px Bungee, Impact, "Arial Black", sans-serif' : '700 15px Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center';
+        const tw = ctx.measureText(b.str).width + (shout ? 30 : 20);
+        const jx = shout ? Math.sin(b.life * 70) * 1.6 : 0;
+        const x = U.clamp(b.x, tw / 2 + 6, C.W - tw / 2 - 6) + jx, y = b.y;
+        ctx.fillStyle = shout ? '#fff7d6' : '#fff'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = shout ? 3 : 2.4;
+        Art.rr(ctx, x - tw / 2, y - bh + 6, tw, bh, 12); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(b.x - 6, y + 5); ctx.lineTo(b.x - 14, y + 17); ctx.lineTo(b.x + 6, y + 5); ctx.fillStyle = shout ? '#fff7d6' : '#fff'; ctx.fill();
         ctx.beginPath(); ctx.moveTo(b.x - 7, y + 5.5); ctx.lineTo(b.x - 14, y + 17); ctx.lineTo(b.x + 5, y + 5.5); ctx.stroke();
-        ctx.fillStyle = Art.OUT; ctx.fillText(b.str, x, y - 3);
+        ctx.fillStyle = shout ? '#d62828' : Art.OUT; ctx.textBaseline = 'alphabetic'; ctx.fillText(b.str, x, shout ? y - 6 : y - 3);
         ctx.restore();
       }
     }

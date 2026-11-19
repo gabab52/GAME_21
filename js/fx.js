@@ -39,7 +39,11 @@
       o = o || {};
       this.texts.push({ x, y, str, life: o.life || 0.9, max: o.life || 0.9, color: o.color || '#fff', size: o.size || 18, vy: o.vy == null ? -50 : o.vy, pop: o.pop !== false });
     }
-    bubble(x, y, str, life) { this.bubbles.push({ x, y, str, life: life || 1.4, max: life || 1.4 }); }
+    /** Speech bubble. `key` makes a new bubble replace the previous one from the same speaker; `shout` = big capitals. */
+    bubble(x, y, str, life, key, shout) {
+      if (key) this.bubbles = this.bubbles.filter((b) => b.key !== key);
+      this.bubbles.push({ x, y, str, life: life || 1.4, max: life || 1.4, key, shout: !!shout });
+    }
     doShake(a) { this.shake = Math.max(this.shake, a); }
     doFlash(c, a) { this.flashColor = c || '#fff'; this.flash = Math.max(this.flash, a == null ? 1 : a); }
 

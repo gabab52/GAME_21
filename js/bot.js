@@ -10,6 +10,16 @@
       const inp = { left: false, right: false, down: false, jumpHeld: false, jumpPressed: false, throwPressed: false, bombPressed: false };
       const home = 190;
       if (p.x < home - 15) inp.right = true; else if (p.x > home + 15) inp.left = true;
+      // RSE meteorite: step out of the target zone, and don't wander back into it until it has landed
+      let dodge = 0, hold = false;
+      for (const m of w.meteors) {
+        if (m.gone || (m.state === 'boom' && m.boomT > 0.3)) continue;
+        const dx = p.x - m.tx;
+        if (Math.abs(dx) < 105) dodge = dx > 0 || (dx === 0 && p.x < 420) ? 1 : -1;
+        else if (Math.abs(dx) < 150) hold = true;
+      }
+      if (dodge) { inp.right = dodge > 0; inp.left = dodge < 0; }
+      else if (hold) { inp.left = false; inp.right = false; }
 
       let jump = false;
       const front = p.x + p.w / 2;

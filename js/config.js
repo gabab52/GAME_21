@@ -43,7 +43,12 @@
       sword: { dur: 7, mul: 1.3, label: 'SWORD', color: '#ffd166' },
       // Scudetto giallorosso: nothing you run into can hurt you
       shield: { dur: 10, mul: 1.12, label: 'SCUDETTO', color: '#f0b429' },
+      // Matita: a pencil sticks out of the hips and pierces every obstacle (cones, books, buoys)
+      pencil: { dur: 8, mul: 1.2, label: 'MATITA', color: '#ff8fb8' },
     },
+
+    // RSE meteorite: telegraphed from the sky, aimed at the hero's position
+    METEOR: { R: 27, BLAST: 48, BLAST_T: 0.16 },
 
     // swimming (water passages)
     SWIM_G: 1250,
@@ -51,6 +56,6 @@
     SWIM_MAX_FALL: 520,
     SWIM_COOLDOWN: 0.2,
 
-    SCORE: { coin: 10, note: 60, oldman: 300, cat: 200, smash: 15, heart: 100 },
+    SCORE: { coin: 10, note: 60, oldman: 300, cat: 200, smash: 15, heart: 100, meteor: 50 },
   };
 })();

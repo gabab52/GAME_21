@@ -11,7 +11,8 @@
   const C = Q.C, U = Q.U;
   const G = C.GRAVITY;
 
-  const OLDMAN_LINES = ['Ma che è?!', 'I miei occhiali!', 'Non è rigoroso!', 'Errore nel lemma!', 'Dov\'è l\'ipotesi?!', 'Banale!', 'Francone non perdona!', 'Questo lo bocciamo!'];
+  // Francone's two catchphrases, in turn, every time a paper hits him (the 4th, killing hit included)
+  const OLDMAN_LINES = ['CAZZO RIDI', 'LE DERIVATE'];
 
   class World {
     constructor() { this.reset(); }
@@ -37,6 +38,7 @@
       this.platforms = [];
       this.water = [];     // water passages {x, w}: inside them the hero swims instead of running
       this.enemies = [];
+      this.meteors = [];   // RSE meteorites falling from the sky (screen space, they don't scroll)
       this.shots = [];
       this.events = [];
       this.shieldCd = 0;
@@ -108,6 +110,7 @@
       this.updatePlayer(dt, inp, ds);
       this.updateEnemies(dt, ds);
       this.updateShots(dt);
+      this.updateMeteors(dt);
       if (!p.dead) this.collide(dt);
     }
 
@@ -230,8 +233,8 @@
       p.swim = on; p.changeT = 0.4; p.jumps = 0; p.canCut = false;
       if (on) {
         p.vy *= 0.3;
-        // wheels and skis don't work in the pool
-        if (this.power.type === 'bike' || this.power.type === 'skis') this.endPower(true);
+        // wheels, skis and a pencil don't work in the pool
+        if (this.power.type === 'bike' || this.power.type === 'skis' || this.power.type === 'pencil') this.endPower(true);
         this.emit('splash', { x: p.x, y: p.y });
       }
       this.emit('costume', { swim: on, x: p.x, y: p.y - 30 });
@@ -240,7 +243,7 @@
     // ---------------------------------------------------------------- enemies
     spawnOldMan() {
       const e = {
-        kind: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 44, h: 62, hp: 4, maxHp: 4,
+        kind: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 36, h: 96, hp: 4, maxHp: 4,   // tall and lanky
         state: 'enter', st: 0, life: 0, anchor: C.W - 150, flash: 0, iframes: 0, dead: false, deadT: 0,
         rot: 0, spin: 0, next: U.rand(1.2, 2.0), lungeSpeed: 480 + this.diff * 160, quote: null, quoteT: 0, hits: 0,
       };
@@ -354,8 +357,8 @@
       if (e.kind === 'oldman') {
         this.setState(e, 'stun');
         e.vx = src === 'bike' ? 380 : 120;
-        e.quote = U.pick(OLDMAN_LINES); e.quoteT = 1.3;
-        this.emit('speech', { text: e.quote, x: e.x, y: e.y - 92 });
+        e.quote = OLDMAN_LINES[(e.hits - 1) % OLDMAN_LINES.length]; e.quoteT = 1.3;
+        this.emit('speech', { text: e.quote, x: e.x, y: e.y - 150, who: 'oldman', shout: true });
       } else if (e.kind === 'cat') {
         this.emit('hiss', { x: e.x, y: e.y - 20 });
       }
@@ -367,8 +370,12 @@
       this.kills++;
       const pts = C.SCORE[e.kind];
       this.bonus += pts;
-      if (e.kind === 'oldman') { e.vy = -640; e.vx = 380; e.spin = 9; e.state = 'dead'; }
-      else { e.vy = -520; e.vx = 220; e.spin = -12; e.state = 'dead'; }
+      if (e.kind === 'oldman') {
+        e.vy = -640; e.vx = 380; e.spin = 9; e.state = 'dead';
+        // the last word is his too (a paper's killing blow keeps the alternation going)
+        e.quote = OLDMAN_LINES[(e.hits || 0) % OLDMAN_LINES.length];
+        this.emit('speech', { text: e.quote, x: e.x, y: e.y - 150, who: 'oldman', shout: true });
+      } else { e.vy = -520; e.vx = 220; e.spin = -12; e.state = 'dead'; }
       this.emit('kill', { kind: e.kind, x: e.x, y: e.y - e.h / 2, pts, src });
     }
 
@@ -389,6 +396,40 @@
       this.shots = this.shots.filter((s) => !s.gone && s.x < C.W + 40);
     }
 
+    // ---------------------------------------------------------------- RSE meteorite
+    /** A meteorite aimed at the hero's position (+ a little lead). It falls diagonally; the target is shown on the ground. */
+    spawnMeteor(tx) {
+      const p = this.player, R = C.METEOR.R;
+      const x = U.clamp(tx != null ? tx : p.x + p.vx * 0.3, C.X_MIN + 20, C.X_MAX + 20);
+      const T = 1.35 - 0.3 * this.diff;                       // flight time: shorter (harder) later in the run
+      const x0 = x + U.rand(170, 260), y0 = -80;
+      const m = {
+        x: x0, y: y0, vx: (x - x0) / T, vy: (C.GROUND - R - y0) / T, r: R, tx: x, T, t: 0,
+        state: 'fall', boomT: 0, harm: false, by: C.GROUND - 16, rot: 0, spin: U.rand(-2.5, 2.5), gone: false,
+      };
+      this.meteors.push(m);
+      this.emit('meteor_warn', { x, y: C.GROUND });
+      return m;
+    }
+    updateMeteors(dt) {
+      for (const m of this.meteors) {
+        if (m.state === 'fall') {
+          m.t += dt; m.x += m.vx * dt; m.y += m.vy * dt; m.rot += m.spin * dt;
+          if (m.y >= C.GROUND - m.r) { m.y = C.GROUND - m.r; this.explodeMeteor(m, true); }
+        } else m.boomT += dt;
+      }
+      this.meteors = this.meteors.filter((m) => !m.gone && m.boomT < 0.55);
+    }
+    /** ground = true: it reached the road, the fireball hurts for a few frames. Otherwise it just burst on the hero. */
+    explodeMeteor(m, ground) {
+      m.state = 'boom'; m.boomT = 0; m.harm = ground; m.by = ground ? C.GROUND - 16 : m.y;
+      this.emit('meteor_impact', { x: m.x, y: m.by, ground });
+    }
+    smashMeteor(m) { // destroyed by sword / Vespa / scudetto: no blast, bonus points
+      m.gone = true; this.bonus += C.SCORE.meteor;
+      this.emit('meteor_smash', { x: m.x, y: m.y });
+    }
+
     // ---------------------------------------------------------------- collisions
     collide(dt) {
       const p = this.player;
@@ -396,7 +437,10 @@
       const sword = this.power.type === 'sword';
       const bike = this.power.type === 'bike';
       const shield = this.power.type === 'shield';
+      const pencil = this.power.type === 'pencil';
       const swordBox = sword ? { l: p.x + 4, r: p.x + 96, t: p.y - 84, b: p.y + 4 } : null;
+      // the pencil sticks out of the hips, a bit in front of the body
+      const pencilBox = pencil ? { l: p.x + 8, r: p.x + 60, t: p.y - 30, b: p.y - 8 } : null;
 
       // coins & banknotes
       for (const c of this.coins) {
@@ -425,15 +469,34 @@
       // obstacles
       for (const o of this.obstacles) {
         const ob = U.shrink(U.rect(o.x + o.w / 2, o.y, o.w, o.h), 3);
-        if (swordBox && U.overlap(swordBox, ob) || ((bike || shield) && U.overlap(pb, ob))) {
+        const pierced = pencil && (U.overlap(pencilBox, ob) || U.overlap(pb, ob));
+        if (swordBox && U.overlap(swordBox, ob) || ((bike || shield) && U.overlap(pb, ob)) || pierced) {
           o.gone = true;
           this.bonus += C.SCORE.smash;
-          this.emit('smash', { x: o.x + o.w / 2, y: o.y - o.h / 2, kind: o.kind });
+          this.emit('smash', { x: o.x + o.w / 2, y: o.y - o.h / 2, kind: o.kind, src: pierced ? 'pencil' : undefined });
           if (shield) this.shieldFlash(o.x + o.w / 2, o.y - o.h / 2);
         } else if (p.invuln <= 0 && U.overlap(pb, ob)) {
           this.hurt(o.x + o.w / 2);
         }
       }
+
+      // meteorites: the falling rock hurts, so does the fireball on the road. Sword / Vespa / scudetto shrug it off.
+      for (const m of this.meteors) {
+        if (m.gone) continue;
+        const falling = m.state === 'fall';
+        if (!falling && !(m.harm && m.boomT < C.METEOR.BLAST_T)) continue;
+        const cx = m.x, cy = falling ? m.y : m.by, R = falling ? m.r - 4 : C.METEOR.BLAST;
+        const near = (b) => { const nx = U.clamp(cx, b.l, b.r), ny = U.clamp(cy, b.t, b.b); return (cx - nx) * (cx - nx) + (cy - ny) * (cy - ny) < R * R; };
+        const hitBody = near(pb);
+        if ((falling && swordBox && near(swordBox)) || (hitBody && (bike || shield))) {
+          if (falling) { this.smashMeteor(m); if (shield) this.shieldFlash(m.x, m.y); }
+          else if (shield) this.shieldFlash(cx, cy);
+        } else if (hitBody && p.invuln <= 0) {
+          this.hurt(m.x);
+          if (falling) this.explodeMeteor(m, false);
+        }
+      }
+      this.meteors = this.meteors.filter((m) => !m.gone);
 
       // enemies
       for (const e of this.enemies) {
@@ -530,6 +593,7 @@
           this.emit('smash', { x: o.x + o.w / 2, y: o.y - o.h / 2, kind: o.kind });
         }
       }
+      for (const m of this.meteors) if (!m.gone && m.state === 'fall') this.smashMeteor(m); // everything goes wrong, for them
     }
   }
 

@@ -23,14 +23,14 @@ at(1160,250,S,()=>{ctx.rotate(1.2);A.hero(ctx,{t:0.3,mode:'run',air:true,vy:0,ex
 at(1330,150,9,()=>{ A.hero(ctx,{t:0.1,mode:'run',air:false,vy:0,expr:'normal'}); });
 // row 2: bike, old man states, cat states
 at(130,520,S,()=>A.bike(ctx,{t:0.2,expr:'happy'}));
-['stalk','windup','lunge','stun'].forEach((st,i)=>at(420+i*130,520,S*0.95,()=>{ctx.scale(-1,1);A.oldman(ctx,{t:0.4+i,state:st});}));
+['stalk','windup','lunge','stun'].forEach((st,i)=>at(420+i*130,520,S*0.7,()=>{ctx.scale(-1,1);A.oldman(ctx,{t:0.4+i,state:st});}));
 ['run','crouch','leap'].forEach((st,i)=>at(980+i*120,520,S,()=>{ctx.scale(-1,1);A.cat(ctx,{t:0.3,state:st,hiss:false});}));
 at(1370,520,S,()=>{A.cat(ctx,{t:0.3,state:'dead'});});
 // row 3: items & obstacles
 at(80,790,S,()=>A.cone(ctx)); at(180,790,S,()=>A.books(ctx));
 at(290,760,S,()=>A.coin(ctx,0)); at(360,760,S,()=>A.note(ctx,0)); at(450,760,S*1.5,()=>A.paper(ctx,0,1));
 at(540,760,S,()=>A.bombItem(ctx,0)); at(620,760,S,()=>A.heart(ctx,0,1));
-['bike','skis','sword','shield'].forEach((k,i)=>at(700+i*92,760,S*0.9,()=>A.powerBadge(ctx,k,0.5)));
+['bike','skis','sword','shield','pencil'].forEach((k,i)=>at(700+i*80,760,S*0.8,()=>A.powerBadge(ctx,k,0.5)));
 at(1040,790,S,()=>A.buoy(ctx,0.3)); at(1130,760,S*1.3,()=>A.scudetto(ctx));
 ['bike','skis','sword','shield'].forEach((k,i)=>{});
 at(930,770,S*0.0001,()=>{});
