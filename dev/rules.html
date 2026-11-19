@@ -135,11 +135,15 @@ test('MATITA: pierces cones, books and buoys without damage (and awards smash po
   const done = w.hearts === 3 && w.obstacles.length === 0 && ev.filter((e) => e === 'smash:pencil').length === 3 && w.bonus >= 3 * C.SCORE.smash;
   run(w, 7); return (done && w.power.type === null) || `hearts=${w.hearts} obs=${w.obstacles.length} ev=${ev} power=${w.power.type}`;
 });
-test('MATITA: reaches obstacles in front of the body (pencil box) but does not kill enemies', () => {
+test('MATITA: reaches obstacles in front of the body (pencil box)', () => {
   const w = fresh(); w.startPower('pencil'); w.obstacles.push({ kind: 'cone', x: w.player.x + 40, y: GY, w: 26, h: 32 });
-  w.update(1/60, NO); const smashedAhead = w.obstacles.every((o) => o.gone) && w.player.x + w.player.w / 2 < w.player.x + 40 - 1;  // gone while still 40px ahead of the hero's centre
-  const v = fresh(); v.startPower('pencil'); const c = v.spawnCat(); c.x = v.player.x + 5; v.update(1/60, NO);
-  return (smashedAhead && !c.dead && v.hearts === 2) || `ahead=${smashedAhead} catDead=${c.dead} hearts=${v.hearts}`;
+  w.update(1/60, NO); return (w.obstacles.every((o) => o.gone) && w.hearts === 3) || 'cone not smashed 40px ahead';
+});
+test('MATITA: skewers Figaro before he reaches the hero (kill event with src "pencil", no damage); Francone is not affected', () => {
+  const w = fresh(); w.startPower('pencil'); const c = w.spawnCat(); c.x = w.player.x + 70; c.state = 'run'; c.run = 100;
+  const ev = []; run(w, 0.5, () => { w.events.forEach((e) => ev.push(e.type + (e.src ? ':' + e.src : ''))); w.events.length = 0; return NO; });
+  const v = fresh(); v.startPower('pencil'); const o = v.spawnOldMan(); o.x = v.player.x + 10; o.state = 'lunge'; o.lungeSpeed = 10; run(v, 0.3);
+  return (c.dead && w.hearts === 3 && ev.includes('kill:pencil') && !o.dead && v.hearts === 2) || `catDead=${c.dead} hearts=${w.hearts} ev=${ev} oldDead=${o.dead} oldHearts=${v.hearts}`;
 });
 test('MATITA: lost when diving into the pool', () => {
   const w = fresh(); w.startPower('pencil'); w.water.push({ x: 0, w: 900 }); run(w, 0.3); return (w.power.type === null && w.player.swim) || `power=${w.power.type}`;

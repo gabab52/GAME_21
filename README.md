@@ -24,7 +24,7 @@ Touch devices get on-screen buttons automatically.
 - **Rome skyline** in the background: Colosseo, Altare della Patria, Colonna Traiana, Pantheon, Castel Sant'Angelo + Ponte, San Pietro, with rooftops and umbrella pines; it cycles day → sunset → night → dawn.
 - **Swimming passages**: every ~40 s the road turns into a pool. Touch down in it and a puff of smoke swaps the hero into swim trunks and goggles; every jump press is a paddle stroke (spam them to go higher). Buoys are the obstacles, coins and banknotes float in arcs. Another puff changes him back when he climbs out. Vespa and skis are lost when you dive in; no enemies spawn during a swim.
 - **Papers ∫** = ammo (max 12). **Bomb** (max 3) wipes everything nearby with a slow-mo "VA TUTTO MALE" blast (plus an Italian voice line if the browser has one).
-- **Power-ups** (one at a time): **Vespa** ×1.65 speed, immune, smashes obstacles · **Skis** ×1.4, slidey, lost if you get hit · **Sword** (rare) ×1.3, kills anything it touches · **Scudetto** (giallorosso shield, 10 s) ×1.12, nothing you run into can hurt you: obstacles shatter, enemies bounce off · **Matita** (pencil, 8 s) ×1.2: a pencil sticks out of the hero's hips and pierces every obstacle (cones, books, buoys) without a scratch; enemies and meteorites still hurt, and it's lost when you dive into a pool. Each is temporary, with a HUD timer.
+- **Power-ups** (one at a time): **Vespa** ×1.65 speed, immune, smashes obstacles · **Skis** ×1.4, slidey, lost if you get hit · **Sword** (rare) ×1.3, kills anything it touches · **Scudetto** (giallorosso shield, 10 s) ×1.12, nothing you run into can hurt you: obstacles shatter, enemies bounce off · **Matita** (pencil, 8 s) ×1.2: a pencil sticks out of the hero's hips and pierces every obstacle (cones, books, buoys) without a scratch (it writes **SPUNTITO!** each time) and skewers Figaro before he can pounce (**BESTIACCIA!**); Francone and meteorites still hurt, and it's lost when you dive into a pool. Each is temporary, with a HUD timer.
 - **Money**: coins (€1) and banknotes (€5). Hearts restore health.
 - Speed and enemy frequency ramp up over time; the sky cycles day → sunset → night → dawn.
 
@@ -45,7 +45,7 @@ Gameplay is separate from rendering: `world.js` / `spawner.js` / `bot.js` have *
 
 ## Dev pages (`dev/`)
 Open directly in a browser, or run headless: `msedge --headless=new --dump-dom dev/rules.html`
-- `rules.html` — 45 rule tests (jump, damage, each weapon, each power-up incl. scudetto and pencil, Francone's lines, meteorite aim/dodge/immunities, swimming & costume change, water spawning, platforms…)
+- `rules.html` — 46 rule tests (jump, damage, each weapon, each power-up incl. scudetto and pencil, Francone's lines, meteorite aim/dodge/immunities, swimming & costume change, water spawning, platforms…)
 - `test.html` — 12 bot-played games + invariants
 - `ui.html` — drives the real page (needs `--allow-file-access-from-files`)
 - `sheet.html` — sprite sheet of every character/pose/item

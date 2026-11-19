@@ -250,7 +250,8 @@
           fx.burst(e.x, e.y, { n: 10, color: ['#ffd166', '#fff'], shape: 'star', size: 6, min: 100, max: 360, life: 0.7, grav: 100 });
           fx.parts.push({ x: e.x, y: e.y - 40, vx: -160, vy: -520, life: 1.4, max: 1.4, size: 8, color: '#000', shape: 'glasses', grav: 1300, drag: 0, rot: 0, vr: 10 });
         } else if (e.kind === 'cat') {
-          fx.text(e.x, e.y - 70, 'MIAO?!', { color: '#c6ef4a', size: 22, life: 1.1 });
+          if (e.src === 'pencil') { Sfx.play('pierce'); fx.text(e.x - 30, e.y - 70, 'BESTIACCIA!', { color: '#ff9ec4', size: 26, life: 1.2 }); }
+          else fx.text(e.x, e.y - 70, 'MIAO?!', { color: '#c6ef4a', size: 22, life: 1.1 });
           fx.burst(e.x, e.y, { n: 12, color: ['#1b1b22', '#f7f7f7'], shape: 'feather', size: 7, min: 80, max: 280, life: 0.9, grav: 200 });
           fx.burst(e.x, e.y, { n: 6, color: ['#ffd166', '#fff'], shape: 'star', size: 5, min: 100, max: 300, life: 0.6, grav: 100 });
         }
@@ -262,7 +263,7 @@
         fx.burst(e.x, e.y, { n: 12, color: e.kind === 'cone' ? ['#ff8a3d', '#fff'] : e.kind === 'buoy' ? ['#ff4d4d', '#fff'] : ['#3a86ff', '#ef476f', '#06d6a0', '#fff'], shape: 'sq', size: 6, min: 100, max: 340, life: 0.7, grav: 700 });
         if (e.src === 'pencil') { // pencil shavings + graphite dust
           fx.burst(e.x, e.y, { n: 8, color: ['#ffd23f', '#f2c999', '#2b2f3f'], shape: 'chip', size: 6, min: 120, max: 360, life: 0.7, grav: 500 });
-          fx.text(e.x, e.y - 30, 'BUCATO!', { color: '#ff9ec4', size: 17, life: 0.7 });
+          fx.text(e.x, e.y - 30, 'SPUNTITO!', { color: '#ff9ec4', size: 18, life: 0.8 }); // the pencil gets blunted
         }
         break;
       // RSE meteorite

@@ -503,6 +503,8 @@
         if (e.dead) continue;
         const eb = this.enemyBox(e);
         if (swordBox && (U.overlap(swordBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'sword'); continue; }
+        // the pencil skewers Figaro before he reaches the hero ("BESTIACCIA!"); Francone is too big for it
+        if (pencilBox && e.kind === 'cat' && (U.overlap(pencilBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'pencil'); continue; }
         if (!U.overlap(pb, eb)) continue;
         if (bike) {
           this.damageEnemy(e, e.kind === 'oldman' ? 2 : 99, 'bike');
