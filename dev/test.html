@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>headless sim</title></head>
+<body><pre id="out">running…</pre>
+<script src="../js/config.js"></script><script src="../js/util.js"></script>
+<script src="../js/spawner.js"></script><script src="../js/world.js"></script><script src="../js/bot.js"></script>
+<script>
+// Headless gameplay simulation: the bot plays N games with a fixed 60Hz step. No DOM/canvas needed by the logic.
+const C = Q.C, out = [];
+const runs = 12, results = [];
+const evCount = {};
+const errs = [];
+window.addEventListener('error', e => errs.push(e.message));
+function sim(maxT, opts = {}) {
+  const w = new Q.World();
+  const noInp = { left:false,right:false,down:false,jumpHeld:false,jumpPressed:false,throwPressed:false,bombPressed:false };
+  let t = 0;
+  const seen = {};
+  while (!w.over && t < maxT) {
+    const inp = opts.idle ? noInp : Q.Bot.decide(w);
+    w.update(1/60, inp);
+    for (const e of w.events) { seen[e.type] = (seen[e.type]||0)+1; evCount[e.type] = (evCount[e.type]||0)+1; }
+    w.events.length = 0;
+    t += 1/60;
+    // invariants
+    const p = w.player;
+    if (!isFinite(p.x+p.y+p.vx+p.vy)) throw new Error('NaN player');
+    if (w.hearts < 0 || w.hearts > C.MAX_HEARTS) throw new Error('hearts range '+w.hearts);
+    if (w.ammo < 0 || w.ammo > C.MAX_AMMO) throw new Error('ammo range '+w.ammo);
+    if (w.bombs < 0 || w.bombs > C.MAX_BOMBS) throw new Error('bombs range '+w.bombs);
+    if (w.coins.length > 400 || w.obstacles.length > 80 || w.enemies.length > 20) throw new Error('entity leak');
+  }
+  return { w, t, seen };
+}
+try {
+  for (let i = 0; i < runs; i++) {
+    const { w, t } = sim(300);
+    results.push({ survived: t.toFixed(1), score: w.score, m: Math.floor(w.meters), money: w.money, kills: w.kills, hearts: w.hearts, over: w.over, ammo: w.ammo, speed: Math.round(w.scroll) });
+  }
+  out.push('BOT RUNS (max 300s each):');
+  results.forEach((r,i)=>out.push(' #'+i+' '+JSON.stringify(r)));
+  out.push('EVENT TOTALS: '+JSON.stringify(evCount));
+  // idle player: should take damage and die, game over must fire
+  const idle = sim(120, { idle: true });
+  out.push('IDLE: over='+idle.w.over+' t='+idle.t.toFixed(1)+' hearts='+idle.w.hearts);
+  // spawn mix over a 120s bot run: count what exists in kinds
+  const w2 = new Q.World(); const kinds = {};
+  const inv = { ...{ } };
+  for (let i = 0; i < 60*100 && !w2.over; i++) { w2.hearts = 3; w2.update(1/60, Q.Bot.decide(w2)); for (const e of w2.enemies) kinds[e.kind] = 1; w2.events.length = 0;
+    for (const it of w2.items) kinds['item:'+it.kind] = 1; for (const o of w2.obstacles) kinds['obst:'+o.kind]=1; if (w2.platforms.length) kinds.platform = 1; if (w2.power.type) kinds['power:'+w2.power.type] = 1; }
+  out.push('SEEN IN 100s: '+Object.keys(kinds).sort().join(', '));
+  out.push('ERRORS: '+(errs.length?errs.join(' | '):'none'));
+} catch (e) { out.push('EXCEPTION: '+e.stack); }
+document.getElementById('out').textContent = out.join('\n');
+</script></body></html>

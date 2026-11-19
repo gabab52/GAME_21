@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>head close-up</title>
+<style>body{margin:0;background:#c9e2d8}canvas{display:block}</style></head>
+<body><canvas id="c" width="1500" height="760"></canvas>
+<script src="../js/config.js"></script><script src="../js/util.js"></script><script src="../js/art.js"></script>
+<script>
+const A = Q.Art, ctx = document.getElementById('c').getContext('2d');
+ctx.fillStyle = '#c9e2d8'; ctx.fillRect(0, 0, 1500, 760);
+function at(x, y, s, fn) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); fn(); ctx.restore(); }
+// big close-ups of the head in each expression (compare with main_character.jpg)
+['normal', 'happy', 'focus', 'shout', 'hurt'].forEach((e, i) => at(130 + i * 240, 215, 7.4, () => A.head(ctx, { expr: e })));
+at(1330, 215, 7.4, () => A.head(ctx, { expr: 'happy', helmet: true }));
+// the full body at game size ×4 (run / jump / throw) and 1.15 in-game scale ×1
+[0, 0.5].forEach((t, i) => at(90 + i * 130, 640, 4.2, () => A.hero(ctx, { t, mode: 'run', air: false, vy: 0, expr: 'normal' })));
+at(360, 640, 4.2, () => A.hero(ctx, { t: 0.3, mode: 'run', air: true, vy: -300, expr: 'happy' }));
+at(500, 640, 4.2, () => A.hero(ctx, { t: 0.3, mode: 'run', air: false, vy: 0, expr: 'normal', throwP: 0.8 }));
+at(660, 640, 4.2, () => A.hero(ctx, { t: 0.3, mode: 'sword', air: false, vy: 0, expr: 'focus' }));
+at(840, 650, 4.2, () => A.hero(ctx, { t: 0.3, mode: 'skis', air: false, vy: 0, expr: 'focus' }));
+at(1040, 690, 4.2, () => A.heroSwim(ctx, { t: 0.2, expr: 'normal' }));
+at(1280, 650, 3.4, () => A.bike(ctx, { t: 0.2, expr: 'happy' }));
+// real game scale (what the player actually sees)
+at(60, 740, 1.15, () => A.hero(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'normal' }));
+</script></body></html>

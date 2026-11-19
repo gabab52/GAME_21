@@ -1,0 +1,188 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>rules</title></head>
+<body><pre id="out">running…</pre>
+<script src="../js/config.js"></script><script src="../js/util.js"></script>
+<script src="../js/spawner.js"></script><script src="../js/world.js"></script>
+<script>
+const C = Q.C, GY = C.GROUND;
+const NO = { left:false,right:false,down:false,jumpHeld:false,jumpPressed:false,throwPressed:false,bombPressed:false };
+const res = [];
+function test(name, fn) { try { const r = fn(); res.push((r === true ? 'PASS ' : 'FAIL ') + name + (r === true ? '' : ' -> ' + r)); } catch (e) { res.push('ERR  ' + name + ' -> ' + e.message); } }
+function fresh() { const w = new Q.World(); w.spawner.update = () => {}; return w; }       // no random spawns
+function run(w, secs, inp) { for (let i = 0; i < secs * 60; i++) { w.update(1/60, typeof inp === 'function' ? inp(i) : (inp || NO)); } }
+const P = (o) => Object.assign({}, NO, o);
+
+test('idle player runs on ground, scroll ramps up', () => { const w = fresh(); run(w, 5); return w.player.onGround && w.scroll > C.BASE_SPEED || 'scroll=' + w.scroll; });
+test('jump leaves ground, apex ~ 130-145px', () => {
+  const w = fresh(); let min = GY;
+  run(w, 1.2, (i) => { min = Math.min(min, w.player.y); return P({ jumpPressed: i === 0, jumpHeld: true }); });
+  const h = GY - min; return (h > 120 && h < 150) || 'apex=' + h.toFixed(1);
+});
+test('tap jump is a short hop', () => {
+  const w = fresh(); let min = GY;
+  run(w, 1, (i) => { min = Math.min(min, w.player.y); return P({ jumpPressed: i === 0, jumpHeld: i < 3 }); });
+  const h = GY - min; return (h > 20 && h < 90) || 'hop=' + h.toFixed(1);
+});
+test('double jump works once, third press does nothing', () => {
+  const w = fresh(); let jumps = 0, dj = 0;
+  run(w, 1.4, (i) => { for (const e of w.events) { if (e.type === 'jump') jumps++; if (e.type === 'djump') dj++; } w.events.length = 0; return P({ jumpPressed: i === 0 || i === 20 || i === 30, jumpHeld: true }); });
+  return (jumps === 1 && dj === 1) || `jumps=${jumps} djumps=${dj}`;
+});
+test('obstacle hurts, then i-frames prevent double damage', () => {
+  const w = fresh(); w.obstacles.push({ kind: 'cone', x: w.player.x - 13, y: GY, w: 26, h: 32 });
+  run(w, 0.3); const h1 = w.hearts; w.obstacles.push({ kind: 'cone', x: w.player.x - 13, y: GY, w: 26, h: 32 }); run(w, 0.1);
+  return (h1 === 2 && w.hearts === 2) || `h1=${h1} h2=${w.hearts}`;
+});
+test('three hits = dead = gameover event after fall', () => {
+  const w = fresh(); let over = false;
+  for (let k = 0; k < 3; k++) { w.player.invuln = 0; w.player.y = GY; w.player.vy = 0; w.player.hurtT = 0; w.obstacles.length = 0; w.obstacles.push({ kind: 'cone', x: w.player.x - 13, y: GY, w: 26, h: 32 }); run(w, 0.2); }
+  run(w, 2); over = w.over && w.hearts === 0 && w.player.dead; return over || `over=${w.over} hearts=${w.hearts}`;
+});
+test('coin +1, banknote +5, score bonus', () => {
+  const w = fresh(); w.coins.push({ kind: 'coin', x: w.player.x, y: GY - 30, r: 11, value: 1 }, { kind: 'note', x: w.player.x, y: GY - 30, r: 14, value: 5 });
+  run(w, 0.1); return (w.money === 6 && w.bonus >= 70) || `money=${w.money} bonus=${w.bonus}`;
+});
+test('paper pickup adds ammo, capped', () => {
+  const w = fresh(); w.ammo = C.MAX_AMMO; w.items.push({ kind: 'paper', x: w.player.x, y: GY - 30, r: 15, ph: 0 }); run(w, 0.1);
+  const a = w.ammo; w.ammo = 2; w.items.push({ kind: 'paper', x: w.player.x, y: GY - 30, r: 15, ph: 0 }); run(w, 0.1);
+  return (a === C.MAX_AMMO && w.ammo === 3) || `cap=${a} then=${w.ammo}`;
+});
+test('throw consumes ammo, 4 papers kill the old man (hp 4)', () => {
+  const w = fresh(); w.ammo = 6; const e = w.spawnOldMan(); e.x = 700; e.state = 'stalk'; e.anchor = 700; e.next = 999;
+  let thrown = 0; run(w, 4, (i) => P({ throwPressed: i % 15 === 0 }));
+  return (e.dead && w.ammo <= 2 && w.kills === 1) || `dead=${e.dead} ammo=${w.ammo} hp=${e.hp}`;
+});
+test('no ammo: throw does nothing', () => {
+  const w = fresh(); w.ammo = 0; run(w, 0.2, (i) => P({ throwPressed: true })); return w.shots.length === 0 || 'shots=' + w.shots.length;
+});
+test('old man lunge hurts a grounded player but can be jumped', () => {
+  const w = fresh(); const e = w.spawnOldMan(); e.x = 640; e.state = 'windup'; e.st = 0.7; e.anchor = 640;
+  run(w, 2.5, (i) => P({ jumpPressed: i === 36, jumpHeld: i < 90 })); const jumped = w.hearts;
+  const w2 = fresh(); const e2 = w2.spawnOldMan(); e2.x = 640; e2.state = 'windup'; e2.st = 0.7; e2.anchor = 640; run(w2, 2.5);
+  return (jumped === 3 && w2.hearts === 2) || `jumped=${jumped} stood=${w2.hearts}`;
+});
+test('cat can be stomped (kill + bounce), not hurting', () => {
+  const w = fresh(); const c = w.spawnCat(); c.x = w.player.x + 0; c.y = GY; c.state = 'run';
+  w.player.y = GY - 34; w.player.vy = 300; w.player.onGround = false; w.player.prevY = GY - 38; run(w, 0.05);
+  return (c.dead && w.hearts === 3 && w.player.vy < 0) || `dead=${c.dead} hearts=${w.hearts} vy=${w.player.vy}`;
+});
+test('cat on the ground hurts', () => {
+  const w = fresh(); const c = w.spawnCat(); c.x = w.player.x; run(w, 0.1); return w.hearts === 2 || 'hearts=' + w.hearts;
+});
+test('no birds exist any more', () => !('spawnPigeon' in Q.World.prototype) || 'spawnPigeon still present');
+test('SCUDETTO: blocks obstacles and enemies, no heart lost, no knockback, obstacle smashed', () => {
+  const w = fresh(); w.startPower('shield');
+  w.obstacles.push({ kind: 'cone', x: w.player.x - 13, y: GY, w: 26, h: 32 });
+  const c = w.spawnCat(); c.x = w.player.x + 5; const o = w.spawnOldMan(); o.x = w.player.x; o.state = 'lunge'; o.lungeSpeed = 10;
+  const ev = []; run(w, 0.5, () => { w.events.forEach((e) => ev.push(e.type)); w.events.length = 0; return NO; });
+  return (w.hearts === 3 && w.obstacles.length === 0 && w.player.onGround && ev.includes('shield_block')) || `hearts=${w.hearts} obs=${w.obstacles.length} ev=${[...new Set(ev)]}`;
+});
+test('SCUDETTO: hurt() is a no-op, lasts 10s, then ends with grace period', () => {
+  const w = fresh(); w.startPower('shield'); w.hurt(0); const h = w.hearts; run(w, 9.5); const still = w.power.type === 'shield'; run(w, 0.7);
+  return (h === 3 && still && w.power.type === null && w.player.invuln > 0.2) || `h=${h} still=${still} power=${w.power.type}`;
+});
+test('SCUDETTO appears in the power-up pool', () => {
+  const w = fresh(); const seen = new Set(); const sp = w.spawner;
+  const pat = sp.patterns.find((p) => p.name === 'powerUp'); w.t = 30;
+  for (let i = 0; i < 200; i++) { w.items.length = 0; sp.cool.power = 0; pat.run(1000, w, sp); w.items.forEach((it) => seen.add(it.kind)); }
+  return (seen.has('shield') && seen.has('bike') && seen.has('sword') && seen.has('skis')) || [...seen].join();
+});
+test('SWIM: touching down in a pool switches to swimming (costume event, low hitbox), leaving switches back', () => {
+  const w = fresh(); w.water.push({ x: 100, w: 600 }); const ev = [];
+  run(w, 0.3, () => { w.events.forEach((e) => ev.push(e.type + (e.swim === undefined ? '' : ':' + e.swim))); w.events.length = 0; return NO; });
+  const inWater = w.player.swim && w.player.w === 44 && w.player.h === 26;
+  w.water[0].x = -2000; run(w, 0.2, () => { w.events.forEach((e) => ev.push(e.type + (e.swim === undefined ? '' : ':' + e.swim))); w.events.length = 0; return NO; });
+  const out = !w.player.swim && w.player.h === 62;
+  return (inWater && out && ev.includes('splash') && ev.includes('costume:true') && ev.includes('costume:false')) || `inWater=${inWater} out=${out} ev=${ev}`;
+});
+test('SWIM: jump key = unlimited strokes (floaty), apex ~ 90-110px, cooldown respected', () => {
+  const w = fresh(); w.water.push({ x: 0, w: 5000 }); run(w, 0.2); let min = GY;
+  run(w, 2, (i) => { min = Math.min(min, w.player.y); return P({ jumpPressed: i === 0, jumpHeld: true }); });
+  const h = GY - min;
+  const v = fresh(); v.water.push({ x: 0, w: 5000 }); run(v, 0.2); let n = 0, top = GY;
+  run(v, 2, (i) => { top = Math.min(top, v.player.y); v.events.forEach((e) => { if (e.type === 'stroke') n++; }); v.events.length = 0; return P({ jumpPressed: i % 4 === 0, jumpHeld: true }); });
+  return (w.player.swim && h > 85 && h < 115 && n >= 6 && GY - top > h + 40) || `swim=${w.player.swim} single apex=${h.toFixed(0)} spam strokes=${n} spam apex=${(GY - top).toFixed(0)}`;
+});
+test('SWIM: a jump taken over the water lands in it, then swims', () => {
+  const w = fresh(); w.water.push({ x: 150, w: 900 }); w.player.x = 100; w.player.vx = 0;
+  run(w, 0.05); run(w, 1.2, (i) => P({ jumpPressed: i === 0, jumpHeld: true, right: true }));
+  return w.player.swim || 'not swimming; x=' + w.player.x.toFixed(0);
+});
+test('SWIM: Vespa and skis are lost when diving in; sword and scudetto are kept', () => {
+  const a = fresh(); a.startPower('bike'); a.water.push({ x: 0, w: 900 }); run(a, 0.3);
+  const b = fresh(); b.startPower('skis'); b.water.push({ x: 0, w: 900 }); run(b, 0.3);
+  const c = fresh(); c.startPower('sword'); c.water.push({ x: 0, w: 900 }); run(c, 0.3);
+  const d = fresh(); d.startPower('shield'); d.water.push({ x: 0, w: 900 }); run(d, 0.3);
+  return (a.power.type === null && b.power.type === null && c.power.type === 'sword' && d.power.type === 'shield' && a.player.swim) || `${a.power.type},${b.power.type},${c.power.type},${d.power.type}`;
+});
+test('SWIM: buoys hurt a swimmer who does not stroke over them; a stroke clears them', () => {
+  const w = fresh(); w.water.push({ x: 0, w: 5000 }); run(w, 0.3);
+  w.obstacles.push({ kind: 'buoy', x: w.player.x + 150, y: GY, w: 28, h: 30 }); run(w, 1.2); const hit = w.hearts;
+  const v = fresh(); v.water.push({ x: 0, w: 5000 }); run(v, 0.3);
+  v.obstacles.push({ kind: 'buoy', x: v.player.x + 150, y: GY, w: 28, h: 30 });
+  run(v, 1.2, (i) => P({ jumpPressed: i === 8, jumpHeld: true }));
+  return (hit === 2 && v.hearts === 3) || `idle=${hit} stroked=${v.hearts}`;
+});
+test('BOMB: kills every enemy on screen, consumes bomb, fires events in order', () => {
+  const w = fresh(); w.spawnOldMan(); w.spawnCat(); w.spawnCat(); w.enemies.forEach((e) => (e.x = 600)); w.bombs = 1;
+  const order = []; run(w, 0.6, (i) => { w.events.forEach((e) => { if (e.type.startsWith('bomb')) order.push(e.type); }); w.events.length = 0; return P({ bombPressed: i === 0 }); });
+  const alive = w.enemies.filter((e) => !e.dead).length;
+  return (alive === 0 && w.bombs === 0 && order.join() === 'bomb_arm,bomb_blast' && w.bombFx > 0) || `alive=${alive} bombs=${w.bombs} ev=${order}`;
+});
+test('bomb without stock does nothing', () => {
+  const w = fresh(); w.bombs = 0; run(w, 0.5, () => P({ bombPressed: true })); return (w.bombFuse <= 0 && w.bombFx <= 0) || 'fired';
+});
+test('SWORD: kills old man on contact without damage, smashes obstacles', () => {
+  const w = fresh(); w.startPower('sword'); const e = w.spawnOldMan(); e.x = w.player.x + 60; e.state = 'lunge'; e.lungeSpeed = 10;
+  w.obstacles.push({ kind: 'books', x: w.player.x + 50, y: GY, w: 38, h: 42 }); run(w, 0.3);
+  return (e.dead && w.hearts === 3 && w.obstacles.length === 0) || `dead=${e.dead} hearts=${w.hearts} obs=${w.obstacles.length}`;
+});
+test('BIKE: speed boost, immune, smashes obstacles, bumps old man', () => {
+  const w = fresh(); w.startPower('bike'); run(w, 2);
+  const fast = w.speedMul > 1.55; w.obstacles.push({ kind: 'cone', x: w.player.x, y: GY, w: 26, h: 32 });
+  const e = w.spawnOldMan(); e.x = w.player.x + 20; e.state = 'lunge'; e.lungeSpeed = 10; run(w, 0.3);
+  return (fast && w.hearts === 3 && w.obstacles.length === 0 && e.hp < 4) || `speedMul=${w.speedMul.toFixed(2)} hearts=${w.hearts} obs=${w.obstacles.length} hp=${e.hp}`;
+});
+test('SKIS: faster, lost when hurt', () => {
+  const w = fresh(); w.startPower('skis'); run(w, 2); const fast = w.speedMul > 1.3;
+  w.obstacles.push({ kind: 'cone', x: w.player.x, y: GY, w: 26, h: 32 }); run(w, 0.2);
+  return (fast && w.power.type === null && w.hearts === 2) || `fast=${fast} power=${w.power.type} hearts=${w.hearts}`;
+});
+test('power-up expires, with i-frames afterwards', () => {
+  const w = fresh(); w.startPower('sword'); run(w, 7.2); return (w.power.type === null && w.player.invuln > 0.5) || `power=${w.power.type} inv=${w.player.invuln}`;
+});
+test('platform: land on it, ride it, drop through with DOWN', () => {
+  const w = fresh(); w.platforms.push({ x: w.player.x - 80, y: GY - 100, w: 400 }); w.player.y = GY - 140; w.player.vy = 100; w.player.onGround = false; w.player.prevY = GY - 141;
+  run(w, 0.3); const on = Math.abs(w.player.y - (GY - 100)) < 1 && w.player.onGround;
+  run(w, 0.05, () => P({ down: true })); run(w, 0.4, () => P({ down: true })); const through = w.player.y > GY - 100 + 20;
+  return (on && through) || `on=${on} through=${through} y=${w.player.y}`;
+});
+test('difficulty ramps: scroll speed increases over time, capped', () => {
+  const w = fresh(); run(w, 1); const s0 = w.scroll; run(w, 120); const s1 = w.scroll; return (s1 > s0 * 1.6 && s1 <= C.MAX_SPEED + 1) || `s0=${s0} s1=${s1}`;
+});
+test('spawner (real) fills the world and enemies appear later in the run', () => {
+  const w = new Q.World(); const seen = new Set(); w.hearts = 99;
+  for (let i = 0; i < 60 * 240; i++) { w.update(1/60, NO); w.hearts = 99; w.player.invuln = 5; w.events.length = 0; w.enemies.forEach((e) => seen.add(e.kind)); }
+  return (seen.has('cat') && seen.has('oldman') && seen.size === 2) || [...seen].join();
+});
+test('spawner (real): water passages appear, never with enemies/power-ups in them, and always get dry again', () => {
+  const w = new Q.World(); let zones = 0, last = 0, bad = '', maxLen = 0, inside = 0;
+  for (let i = 0; i < 60 * 240; i++) {
+    w.update(1/60, NO); w.hearts = 99; w.player.invuln = 5; w.events.length = 0;
+    if (w.water.length > last) { zones++; if (w.power.type === 'bike' || w.power.type === 'skis') bad = 'powered at spawn'; }
+    last = w.water.length;
+    for (const z of w.water) { for (const e of w.enemies) if (!e.dead && e.x > z.x - 60 && e.x < z.x + z.w + 60) bad = 'enemy in water at t=' + w.t.toFixed(0); maxLen = Math.max(maxLen, z.w); }
+    if (w.player.swim) inside++;
+  }
+  return (zones >= 2 && !bad && inside > 60 * 6) || `zones=${zones} swimFrames=${inside} bad=${bad}`;
+});
+test('water passage is 5-8 seconds long at current speed and carries coins + buoys', () => {
+  const w = fresh(); w.t = 40; w.scroll = 400; const sp = w.spawner; const pat = sp.patterns.find((p) => p.name === 'water');
+  pat.run(1000, w, sp); const z = w.water[0]; const secs = z.w / 400;
+  return (secs > 5 && secs < 8 && w.obstacles.some((o) => o.kind === 'buoy') && w.coins.length > 8) || `secs=${secs} buoys=${w.obstacles.length} coins=${w.coins.length}`;
+});
+test('first 8 seconds contain no enemies', () => {
+  const w = new Q.World(); let bad = 0; for (let i = 0; i < 60 * 8; i++) { w.update(1/60, NO); w.hearts = 99; if (w.enemies.length) bad++; } return bad === 0 || 'enemies early=' + bad;
+});
+document.getElementById('out').textContent = res.join('\n') + '\n\n' + (res.every((r) => r.startsWith('PASS')) ? 'ALL PASS' : 'SOME FAILED');
+</script></body></html>

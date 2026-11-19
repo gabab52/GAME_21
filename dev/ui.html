@@ -1,0 +1,88 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>ui flow</title></head>
+<body><pre id="out">running…</pre>
+<iframe id="f" src="../index.html" width="1000" height="640" style="border:0"></iframe>
+<script>
+// Drives the real page through its DOM: clicks, key events, state checks. Run Edge/Chrome with --allow-file-access-from-files.
+const out = [], log = (ok, m) => out.push((ok ? 'PASS ' : 'FAIL ') + m);
+const f = document.getElementById('f');
+let G;
+const adv = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) G.tick(1 / 60); };   // deterministic game time
+const key = (win, code, type = 'keydown') => win.dispatchEvent(new win.KeyboardEvent(type, { code, bubbles: true }));
+const errs = [];
+f.onload = () => {
+  try {
+    const win = f.contentWindow, doc = f.contentDocument, Q = win.Q;
+    win.addEventListener('error', (e) => errs.push(e.message));
+    G = Q.game;
+    const vis = (id) => !doc.getElementById(id).classList.contains('hidden');
+    log(G.mode === 'menu' && vis('menu') && !vis('pause') && !vis('over'), 'boots into the menu, only the start screen visible');
+    log(doc.querySelector('#menu .title').textContent.includes('QED') && !!doc.getElementById('playBtn'), 'start screen has title + Play button');
+    log(doc.getElementById('menu').textContent.includes('SPACE') && doc.getElementById('controls').textContent.includes('paper'), 'controls shown on start screen and in the bar');
+    adv(2); log(G.mode === 'menu', 'attract-mode demo runs behind the menu without crashing');
+
+    doc.getElementById('playBtn').click();
+    log(G.mode === 'playing' && !vis('menu') && vis('hud'), 'Play button starts the game and shows the HUD');
+    adv(1); let w = G.world;
+    log(w.t > 0.9, 'game loop advances (t=' + w.t.toFixed(2) + ')');
+    log(doc.getElementById('dist').textContent !== '' && Number(doc.getElementById('score').textContent.replace(/,/g, '')) >= 0, 'HUD shows score / distance');
+
+    key(win, 'Space'); adv(0.1); log(!w.player.onGround && w.player.vy !== 0, 'SPACE jumps'); key(win, 'Space', 'keyup'); adv(1);
+    key(win, 'ArrowRight'); adv(0.35); const x1 = w.player.x; key(win, 'ArrowRight', 'keyup'); adv(0.3);
+    key(win, 'KeyA'); adv(0.35); const x2 = w.player.x; key(win, 'KeyA', 'keyup');
+    log(x2 < x1, `→ / A move the hero (${x1.toFixed(0)} then ${x2.toFixed(0)})`);
+    const a0 = w.ammo; key(win, 'KeyX'); adv(0.05); log(w.ammo === a0 - 1 && w.shots.length === 1, 'X throws a paper (ammo ' + a0 + ' -> ' + w.ammo + ')');
+    log(doc.getElementById('ammo').textContent === String(w.ammo), 'HUD paper counter matches');
+    log(doc.getElementById('bombs').textContent === '1' && doc.getElementById('hearts').children.length === 3, 'HUD shows bombs + hearts');
+
+    key(win, 'KeyP'); log(G.mode === 'paused' && vis('pause'), 'P pauses and shows the pause screen');
+    const tp = w.t; adv(1); log(w.t === tp, 'world frozen while paused'); // tick() is a no-op for paused world
+    key(win, 'KeyP'); log(G.mode === 'playing' && !vis('pause'), 'P resumes');
+    doc.getElementById('pauseBtn').click(); log(G.mode === 'paused', 'HUD pause button works'); doc.getElementById('resumeBtn').click(); log(G.mode === 'playing', 'Resume button works');
+    doc.getElementById('pauseBtn').focus(); doc.getElementById('pauseBtn').click(); doc.getElementById('resumeBtn').click();
+    log(!(doc.activeElement && doc.activeElement.tagName === 'BUTTON'), 'no button keeps keyboard focus after a click (SPACE cannot re-press it)');
+    doc.getElementById('pauseBtn').click(); doc.getElementById('menuBtn1').click(); log(G.mode === 'menu' && vis('menu'), 'pause → MENU returns to the title screen');
+    doc.getElementById('playBtn').click(); w = G.world; adv(1);
+
+    w.startPower('bike'); adv(0.2);
+    log(vis('power') && doc.getElementById('powerLabel').textContent === 'VESPA', 'active power-up + label shown in HUD');
+    log(parseFloat(doc.getElementById('powerBar').style.transform.replace(/[^0-9.]/g, '')) > 0.5, 'power-up duration bar is filled');
+    w.power.t = 0.01; adv(0.2); log(!vis('power'), 'power-up pill hides when it ends');
+
+    // bomb through the real key: text overlay state + stock
+    w.bombs = 1; key(win, 'KeyZ'); adv(1.0); log(w.bombs === 0 && w.bombFx > 0, 'Z fires the bomb (VA TUTTO MALE overlay active)');
+    adv(2.5);
+
+    for (let k = 0; k < 3; k++) { w.player.invuln = 0; w.player.hurtT = 0; w.hurt(0); }
+    adv(2.5);
+    log(G.mode === 'over' && vis('over'), 'game over screen appears after the death animation');
+    log(doc.getElementById('finalScore').textContent.length > 0 && doc.getElementById('finalMoney').textContent.startsWith('€') && doc.getElementById('finalDist').textContent.endsWith('m'), 'game over shows score, money, distance');
+    const best = doc.getElementById('finalBest').textContent; log(best !== '' && best !== '0' , 'best score recorded (' + best + ')');
+
+    const old = G.world;
+    doc.getElementById('restartBtn2').click();
+    log(G.mode === 'playing' && G.world !== old && G.world.hearts === 3 && G.world.score < 50 && !vis('over'), 'restart button gives a fresh run');
+    key(win, 'KeyR'); log(G.mode === 'playing', 'R while playing is ignored');
+    key(win, 'KeyM'); log(win.Q.Sfx.muted === true, 'M mutes'); key(win, 'KeyM'); log(win.Q.Sfx.muted === false, 'M unmutes');
+
+    log(doc.querySelectorAll('#touch [data-key]').length === 5, 'touch controls exist (left, right, jump, throw, bomb)');
+    adv(1);
+    const jb = doc.querySelector('#touch [data-key="jump"]');
+    jb.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 1 })); adv(0.1);
+    jb.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    log(!G.world.player.onGround, 'on-screen JUMP button works');
+    const rb = doc.querySelector('#touch [data-key="right"]'); const xr = G.world.player.x;
+    rb.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 2 })); adv(0.3);
+    rb.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 2 }));
+    log(G.world.player.x > xr, 'on-screen RIGHT button works');
+
+    // long soak through the real render path: 3 minutes of autoplay with all effects, must not throw
+    G.world.hearts = 3; const bot = Q.Bot; let thrown = null;
+    try { for (let i = 0; i < 60 * 180; i++) { const wv = G.world; wv.hearts = Math.max(wv.hearts, 2); if (i % 2 === 0) G.tick(1 / 30); } } catch (e) { thrown = e; }
+    log(!thrown, 'render+fx soak (3 min of frames, no input) without exceptions' + (thrown ? ' ' + thrown.stack : ''));
+    log(errs.length === 0, 'no runtime errors reported' + (errs.length ? ': ' + errs.join('|') : ''));
+  } catch (e) { out.push('EXCEPTION ' + e.stack); }
+  out.push(out.every((l) => l.startsWith('PASS')) ? 'ALL PASS' : 'SOME FAILED');
+  document.getElementById('out').textContent = out.join('\n');
+};
+</script></body></html>

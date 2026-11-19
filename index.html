@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>QED RUN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <canvas id="game"></canvas>
+
+      <!-- ============ HUD ============ -->
+      <div id="hud" class="hidden">
+        <div class="hud-left">
+          <div class="score-block">
+            <div class="score"><span id="score">0</span><small>PTS</small></div>
+            <div class="dist"><span id="dist">0</span> m</div>
+            <div id="hearts" class="hearts"></div>
+          </div>
+          <div class="chips">
+            <div class="chip" title="Money"><canvas id="icoCoin" width="48" height="48"></canvas><b id="money">0</b></div>
+            <div class="chip" id="chipAmmo" title="Paper demonstrations (X)"><canvas id="icoPaper" width="48" height="48"></canvas><b id="ammo">0</b><kbd>X</kbd></div>
+            <div class="chip" id="chipBomb" title='Bomb "Va tutto male" (Z)'><canvas id="icoBomb" width="48" height="48"></canvas><b id="bombs">0</b><kbd>Z</kbd></div>
+          </div>
+        </div>
+
+        <div id="power" class="power hidden">
+          <canvas id="powerIcon" width="64" height="64"></canvas>
+          <div class="power-txt"><span id="powerLabel">VESPA</span><div class="bar"><i id="powerBar"></i></div></div>
+        </div>
+
+        <div class="hud-right">
+          <button id="muteBtn" class="round" title="Mute (M)" aria-label="Mute">♪</button>
+          <button id="pauseBtn" class="round" title="Pause (P)" aria-label="Pause">❚❚</button>
+        </div>
+      </div>
+
+      <div id="banner" class="banner"></div>
+
+      <!-- ============ Touch controls ============ -->
+      <div id="touch" class="touch">
+        <div class="pad pad-l">
+          <button data-key="left" aria-label="Left">◀</button>
+          <button data-key="right" aria-label="Right">▶</button>
+        </div>
+        <div class="pad pad-r">
+          <button data-key="bomb" class="small" aria-label="Bomb">💣</button>
+          <button data-key="throw" class="small" aria-label="Throw paper">📄</button>
+          <button data-key="jump" class="big" aria-label="Jump">JUMP</button>
+        </div>
+      </div>
+
+      <!-- ============ Start screen ============ -->
+      <div id="menu" class="screen">
+        <div class="panel menu-panel">
+          <div class="title"><span>QED</span> RUN</div>
+          <div class="tagline">Va tutto male. Corri comunque.</div>
+          <button id="playBtn" class="btn primary">▶ PLAY</button>
+          <div class="grid">
+            <div class="card">
+              <h3>Controls</h3>
+              <ul class="keys">
+                <li><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd><span>move</span></li>
+                <li><kbd>SPACE</kbd><span>jump (twice!)</span></li>
+                <li><kbd>X</kbd><span>throw a paper</span></li>
+                <li><kbd>Z</kbd><span>bomb</span></li>
+                <li><kbd>↓</kbd><span>drop through platform</span></li>
+                <li><kbd>P</kbd> <kbd>M</kbd><span>pause · mute</span></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Survive</h3>
+              <ul class="tips">
+                <li><b class="c1">Francone</b>, the bearded old man, wants to eat you. Grab maths <b>∫ papers</b>, throw them at his face.</li>
+                <li><b class="c2">Figaro</b> the cat pounces. Jump on him or paper him.</li>
+                <li><b class="c3">Vespa · Skis · Sword</b>: speed boosts. The sword kills everything it touches. The <b class="c5">Scudetto</b> blocks everything.</li>
+                <li><b class="c4">Bomb</b>: makes everything go wrong. For them.</li>
+                <li><b class="c6">Pool ahead?</b> Swimsuit on! Tap jump to paddle.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="best">Best <b id="bestMenu">0</b></div>
+        </div>
+      </div>
+
+      <!-- ============ Pause ============ -->
+      <div id="pause" class="screen hidden">
+        <div class="panel small-panel">
+          <div class="big">PAUSED</div>
+          <button id="resumeBtn" class="btn primary">▶ RESUME</button>
+          <button id="restartBtn1" class="btn">↻ RESTART</button>
+          <button id="menuBtn1" class="btn">⌂ MENU</button>
+          <div class="hint"><kbd>P</kbd> resume · <kbd>R</kbd> restart</div>
+        </div>
+      </div>
+
+      <!-- ============ Game over ============ -->
+      <div id="over" class="screen hidden">
+        <div class="panel small-panel">
+          <div class="big red">GAME OVER</div>
+          <div class="quip" id="quip">Va tutto male.</div>
+          <div id="newBest" class="newbest hidden">★ NEW BEST ★</div>
+          <div class="stats">
+            <div><small>SCORE</small><b id="finalScore">0</b></div>
+            <div><small>MONEY</small><b id="finalMoney">€0</b></div>
+            <div><small>DISTANCE</small><b id="finalDist">0 m</b></div>
+            <div><small>BEST</small><b id="finalBest">0</b></div>
+          </div>
+          <button id="restartBtn2" class="btn primary">↻ PLAY AGAIN</button>
+          <button id="menuBtn2" class="btn">⌂ MENU</button>
+          <div class="hint"><kbd>ENTER</kbd> restart</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="rotate" class="rotate">↻ Rotate your phone for the best view</div>
+    <div id="controls" class="controls">
+      <span><kbd>←</kbd><kbd>→</kbd> move</span>
+      <span><kbd>SPACE</kbd> jump</span>
+      <span><kbd>X</kbd> paper</span>
+      <span><kbd>Z</kbd> bomb</span>
+      <span><kbd>P</kbd> pause</span>
+      <span><kbd>M</kbd> mute</span>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/spawner.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/bot.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/fx.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
