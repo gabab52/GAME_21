@@ -71,9 +71,32 @@
     });
   }
 
+  /**
+   * Touch: a tap ANYWHERE on the stage (outside buttons and menu screens) is a jump. Holding the finger down holds the jump
+   * (higher hop), a second tap in the air is the double jump / a swim stroke. Several fingers work independently, so one
+   * thumb can hold an arrow while the other taps to jump.
+   */
+  function bindTapJump(root) {
+    const active = new Set();
+    const accepts = (e) => (e.pointerType !== 'mouse' || document.body.classList.contains('touch-on'))
+      && !(e.target.closest && e.target.closest('button, a, input, .screen'));
+    root.addEventListener('pointerdown', (e) => {
+      if (!accepts(e)) return;
+      e.preventDefault();
+      active.add(e.pointerId);
+      press('jump');
+    });
+    const end = (e) => { if (active.delete(e.pointerId) && active.size === 0) release('jump'); };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    window.addEventListener('blur', () => active.clear());
+    root.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
   Q.Input = {
     on(name, fn) { (handlers[name] = handlers[name] || []).push(fn); },
     bindTouch,
+    bindTapJump,
     /** Build the snapshot consumed by World.update and clear one-shot edges. */
     snapshot() {
       const s = {

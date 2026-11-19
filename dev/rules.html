@@ -245,6 +245,13 @@ test('platform: land on it, ride it, drop through with DOWN', () => {
   run(w, 0.05, () => P({ down: true })); run(w, 0.4, () => P({ down: true })); const through = w.player.y > GY - 100 + 20;
   return (on && through) || `on=${on} through=${through} y=${w.player.y}`;
 });
+test('PLATFORM: standing on a platform the hero keeps his screen position (not carried back to the left edge) and keeps collecting coins', () => {
+  const w = fresh(); const x0 = w.player.x; w.platforms.push({ x: x0 - 100, y: GY - 100, w: 5000 }); w.player.y = GY - 100; w.player.vy = 0; w.player.prevY = GY - 100; w.player.onGround = true;
+  for (let i = 0; i < 5; i++) w.coins.push({ kind: 'coin', x: x0 + 150 + i * 60, y: GY - 130, r: 11, value: 1 });
+  run(w, 1.5); const moved = Math.abs(w.player.x - x0);
+  return (w.player.onGround && w.player.plat && moved < 1 && w.money >= 4) || 'x=' + w.player.x.toFixed(1) + ' (start ' + x0 + ') onGround=' + w.player.onGround + ' money=' + w.money;
+});
+
 test('difficulty ramps: scroll speed increases over time, capped', () => {
   const w = fresh(); run(w, 1); const s0 = w.scroll; run(w, 120); const s1 = w.scroll; return (s1 > s0 * 1.6 && s1 <= C.MAX_SPEED + 1) || `s0=${s0} s1=${s1}`;
 });

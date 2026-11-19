@@ -65,6 +65,7 @@
   }
   window.addEventListener('touchstart', enableTouch, { passive: true, once: true });
   Input.bindTouch($('touch'));
+  Input.bindTapJump($('stage'));   // a tap anywhere on the playfield = jump
   if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Bungee'); document.fonts.load('600 16px Fredoka'); }
 
   // ------------------------------------------------------------ HUD

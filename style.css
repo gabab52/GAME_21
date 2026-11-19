@@ -139,7 +139,7 @@ body.touch-on .controls { display: none; }
 body.touch-on #app { gap: 0; }
 body.hud-off .touch { display: none; }
 .pad { position: absolute; bottom: .9em; display: flex; gap: .7em; align-items: flex-end; pointer-events: auto; }
-.pad-l { left: 1em; } .pad-r { right: 1em; }
+.pad-l { left: 1em; }
 .touch button {
   width: 4.3em; height: 4.3em; border-radius: 50%; border: .17em solid rgba(255,255,255,.85); background: rgba(20,24,48,.45);
   color: #fff; font: 700 1.25em 'Fredoka', sans-serif; touch-action: none; backdrop-filter: blur(2px);
@@ -203,8 +203,8 @@ body.touch-on .banner { font-size: clamp(20px, 4vw, 34px); }
 
 body.touch-on .pad { bottom: var(--safe-bottom); gap: 10px; }
 body.touch-on .pad-l { left: var(--safe-left); }
-/* action cluster (bomb · paper · JUMP): centred a little to the right of the middle of the screen */
-body.touch-on .pad-r { right: auto; left: 57%; transform: translateX(-50%); }
+/* left thumb: arrows, then paper and bomb (a little gap between the two groups). Jump = tap anywhere else. */
+body.touch-on .pad .act { margin-left: 14px; }
 body.touch-on .touch button {
   display: grid; place-items: center; width: clamp(52px, 16vh, 68px); height: clamp(52px, 16vh, 68px);
   padding: 0; border-width: 2px; font-size: 20px; background: rgba(20,24,48,.65);

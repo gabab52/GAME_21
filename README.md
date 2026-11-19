@@ -13,7 +13,7 @@ An endless side-scrolling arcade game (Doodle Jump platforms × Chrome-Dino runn
 | Z | bomb — **VA TUTTO MALE** |
 | P / Esc | pause · M mute · R restart (when paused / game over) · Enter start/restart |
 
-Touch devices get on-screen buttons automatically.
+Touch devices get on-screen buttons automatically: **tap anywhere on the screen to jump** (hold for a higher hop, tap again in the air for the double jump / a swim stroke), while the left thumb has the arrows plus the paper and bomb buttons. Several fingers work at once.
 
 ## What's in it
 - **Hero** drawn from `main_character.jpg` (black pillbox cap with white band, wavy hair, stubble, grey tee) and, on the Vespa, from `main_char_on_bike.jpg` (grey helmet, grey shirt, navy trousers, brown shoes, black backpack, white scooter).
@@ -45,7 +45,7 @@ Gameplay is separate from rendering: `world.js` / `spawner.js` / `bot.js` have *
 
 ## Dev pages (`dev/`)
 Open directly in a browser, or run headless: `msedge --headless=new --dump-dom dev/rules.html`
-- `rules.html` — 50 rule tests (jump, damage, each weapon, each power-up incl. scudetto and pencil, Francone's lines, meteorite aim/dodge/immunities, swimming & costume change, water spawning, platforms…)
+- `rules.html` — 51 rule tests (jump, damage, each weapon, each power-up incl. scudetto and pencil, Francone's lines, meteorite aim/dodge/immunities, swimming & costume change, water spawning, platforms staying put under the hero…)
 - `test.html` — 12 bot-played games + invariants
 - `ui.html` — drives the real page (needs `--allow-file-access-from-files`)
 - `sheet.html` — sprite sheet of every character/pose/item

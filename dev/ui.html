@@ -65,12 +65,30 @@ f.onload = () => {
     key(win, 'KeyR'); log(G.mode === 'playing', 'R while playing is ignored');
     key(win, 'KeyM'); log(win.Q.Sfx.muted === true, 'M mutes'); key(win, 'KeyM'); log(win.Q.Sfx.muted === false, 'M unmutes');
 
-    log(doc.querySelectorAll('#touch [data-key]').length === 5, 'touch controls exist (left, right, jump, throw, bomb)');
+    log(doc.querySelectorAll('#touch [data-key]').length === 4 && !doc.querySelector('#touch [data-key="jump"]'), 'touch buttons: left, right, paper, bomb (no jump button: a tap anywhere jumps)');
+    const padRect = doc.querySelector('.pad-l').getBoundingClientRect(), stageRect = doc.getElementById('stage').getBoundingClientRect();
+    log(doc.querySelector('.pad-l [data-key="throw"]') && doc.querySelector('.pad-l [data-key="bomb"]') && doc.querySelector('.pad-l').getBoundingClientRect().left < stageRect.left + stageRect.width / 2, 'paper and bomb buttons are on the left side');
     adv(1);
-    const jb = doc.querySelector('#touch [data-key="jump"]');
-    jb.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 1 })); adv(0.1);
-    jb.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
-    log(!G.world.player.onGround, 'on-screen JUMP button works');
+    // a tap anywhere on the playfield (the canvas) jumps; releasing ends the hold; a 2nd tap in the air double-jumps
+    const cv = doc.getElementById('game'); const P = (type, id) => cv.dispatchEvent(new win.PointerEvent(type, { bubbles: true, pointerId: id, pointerType: 'touch' }));
+    while (!G.world.player.onGround) adv(0.05);
+    P('pointerdown', 11); adv(0.1);
+    log(!G.world.player.onGround && G.world.player.vy < 0, 'a tap anywhere on the screen jumps');
+    P('pointerup', 11); adv(0.12);
+    const jumpsBefore = G.world.player.jumps; P('pointerdown', 12); adv(0.05); P('pointerup', 12);
+    log(G.world.player.jumps === 2 && jumpsBefore === 1, 'a second tap in the air is the double jump');
+    adv(1.5);
+    // a finger holding the RIGHT arrow while another taps = both work (multi-touch)
+    const rb0 = doc.querySelector('#touch [data-key="right"]'); const xm = G.world.player.x;
+    rb0.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 20, pointerType: 'touch' })); adv(0.1);
+    P('pointerdown', 21); adv(0.1);
+    log(!G.world.player.onGround && G.world.player.x > xm, 'arrow held + tap with another finger: moves AND jumps');
+    P('pointerup', 21); rb0.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 20, pointerType: 'touch' })); adv(1.5);
+    // taps on buttons / menu screens must NOT jump
+    const hb = doc.getElementById('pauseBtn'); while (!G.world.player.onGround) adv(0.05);
+    hb.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 30, pointerType: 'touch' })); adv(0.1);
+    hb.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 30, pointerType: 'touch' }));
+    log(G.world.player.onGround, 'a tap on a HUD button does not jump');
     const rb = doc.querySelector('#touch [data-key="right"]'); const xr = G.world.player.x;
     rb.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true, pointerId: 2 })); adv(0.3);
     rb.dispatchEvent(new win.PointerEvent('pointerup', { bubbles: true, pointerId: 2 }));

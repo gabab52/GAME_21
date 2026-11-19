@@ -161,7 +161,8 @@
         p.vx = U.clamp(p.vx, -max, max);
       }
       p.x += p.vx * dt;
-      if (p.onGround && p.plat) p.x -= ds; // platforms carry you with the scroll
+      // NB: no "platform carries you back with the scroll": the hero runs at the world's pace on a platform exactly as on the
+      // ground, so his screen position stays put and the coins slide towards him — he never gets pinned at the left edge.
       p.x = U.clamp(p.x, C.X_MIN, C.X_MAX);
 
       // jump (coyote time + input buffer + one air jump)
