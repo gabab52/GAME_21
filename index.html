@@ -49,9 +49,9 @@
           <button data-key="right" aria-label="Right">▶</button>
         </div>
         <div class="pad pad-r">
-          <button data-key="bomb" class="small" aria-label="Bomb">💣</button>
-          <button data-key="throw" class="small" aria-label="Throw paper">📄</button>
-          <button data-key="jump" class="big" aria-label="Jump">JUMP</button>
+          <button data-key="bomb" class="small" aria-label="Bomb"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m20 10 3-3 3 3-3 3M24 7c0-4 4-5 5-3M27 2l2 2M28 7h3"/><circle cx="14" cy="20" r="10"/><path d="M8 19a6 6 0 0 1 5-5"/></svg></button>
+          <button data-key="throw" class="small" aria-label="Throw paper"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 3h12l6 6v20H8zM20 3v7h6M13 15h8M13 20h8M13 25h5"/></svg></button>
+          <button data-key="jump" class="big" aria-label="Jump"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m7 14 9-9 9 9M16 5v22"/></svg><span>SALTA</span></button>
         </div>
       </div>
 
@@ -84,6 +84,13 @@
                 <li><b class="c6">Pool ahead?</b> Swimsuit on! Tap jump to paddle.</li>
               </ul>
             </div>
+          </div>
+          <div class="mobile-guide">
+            <h3>Comandi touch</h3>
+            <p><b>Muoviti</b><span>Usa le frecce a sinistra.</span></p>
+            <p><b>Salta</b><span>Tocca SALTA. Di nuovo in aria per il doppio salto.</span></p>
+            <p><b>Difenditi</b><span>Lancia i fogli e usa la bomba con i tasti a destra.</span></p>
+            <div class="mobile-tip">Raccogli monete e potenziamenti. Occhio a Francone e Figaro!</div>
           </div>
           <div class="best">Best <b id="bestMenu">0</b></div>
         </div>
@@ -119,7 +126,13 @@
       </div>
     </div>
 
-    <div id="rotate" class="rotate">↻ Rotate your phone for the best view</div>
+    <div id="rotate" class="rotate" role="status">
+      <div class="rotate-mark">QED <span>RUN</span></div>
+      <svg class="rotate-phone" viewBox="0 0 120 120" fill="none" aria-hidden="true"><rect x="38" y="22" width="44" height="76" rx="9"/><path d="M53 30h14M56 89h8M18 60a42 42 0 0 1 69-32m0-13v13H74M102 60a42 42 0 0 1-69 32m0 13V92h13"/></svg>
+      <strong>Ruota e corri.</strong>
+      <p>Gira lo smartphone in orizzontale<br>per giocare a tutto schermo.</p>
+      <span class="rotate-note">Più spazio al gioco. Comandi a portata di pollice.</span>
+    </div>
     <div id="controls" class="controls">
       <span><kbd>←</kbd><kbd>→</kbd> move</span>
       <span><kbd>SPACE</kbd> jump</span>
