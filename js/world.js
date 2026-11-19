@@ -11,7 +11,7 @@
   const C = Q.C, U = Q.U;
   const G = C.GRAVITY;
 
-  // Francone's two catchphrases, in turn, every time a paper hits him (the 4th, killing hit included)
+  // Francone's two catchphrases, one per life: "CAZZO RIDI" on the first hit, "LE DERIVATE" on the second (the killing one)
   const OLDMAN_LINES = ['CAZZO RIDI', 'LE DERIVATE'];
 
   class World {
@@ -28,7 +28,7 @@
       this.bonus = 0;
       this.money = 0;
       this.kills = 0;
-      this.hearts = C.MAX_HEARTS;
+      this.hearts = C.START_HEARTS;
       this.ammo = C.START_AMMO;
       this.bombs = C.START_BOMBS;
       this.power = { type: null, t: 0, dur: 0 };
@@ -243,7 +243,7 @@
     // ---------------------------------------------------------------- enemies
     spawnOldMan() {
       const e = {
-        kind: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 36, h: 96, hp: 4, maxHp: 4,   // tall and lanky
+        kind: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 36, h: 96, hp: 2, maxHp: 2,   // tall and lanky, but only two lives: one line per hit
         state: 'enter', st: 0, life: 0, anchor: C.W - 150, flash: 0, iframes: 0, dead: false, deadT: 0,
         rot: 0, spin: 0, next: U.rand(1.2, 2.0), lungeSpeed: 480 + this.diff * 160, quote: null, quoteT: 0, hits: 0,
       };
@@ -277,6 +277,12 @@
         e.flash -= dt; e.iframes -= dt; e.st += dt;
         if (e.dead) {
           e.deadT += dt;
+          if (e.skewer) {
+            // impaled on the pencil: carried on its tip for a moment, wiggling, then flung away
+            if (e.deadT < 0.5) { e.x = p.x + 50; e.y = p.y - 3; e.rot = -0.25 + Math.sin(e.deadT * 45) * 0.1; continue; }
+            e.skewer = false; e.vx = 320; e.vy = -540; e.spin = -12;
+            this.emit('unskewer', { x: e.x, y: e.y - 14 });
+          }
           e.vy += G * dt * (e.kind === 'oldman' ? 0.8 : 1);
           e.x += e.vx * dt; e.y += e.vy * dt; e.rot += e.spin * dt;
           if (e.kind !== 'oldman' && e.y > C.GROUND && e.vy > 0) { e.y = C.GROUND; e.vy *= -0.3; e.vx *= 0.6; e.spin *= 0.5; }
@@ -295,7 +301,13 @@
       switch (e.state) {
         case 'enter':
           e.x -= 300 * dt;
-          if (e.x <= e.anchor) this.setState(e, 'stalk', U.rand(1.0, 1.9) * (1.15 - this.diff * 0.45));
+          if (e.x <= e.anchor) {
+            this.setState(e, 'stalk', U.rand(1.0, 1.9) * (1.15 - this.diff * 0.45));
+            if (!e.greeted) { // first entrance: he announces himself
+              e.greeted = true;
+              this.emit('speech', { text: 'SIGNORI', x: e.x, y: e.y - 150, who: 'oldman', shout: true });
+            }
+          }
           break;
         case 'stalk':
           e.x += (e.anchor + Math.sin(e.life * 2.2) * 34 - e.x) * Math.min(1, dt * 7);
@@ -375,7 +387,8 @@
         // the last word is his too (a paper's killing blow keeps the alternation going)
         e.quote = OLDMAN_LINES[(e.hits || 0) % OLDMAN_LINES.length];
         this.emit('speech', { text: e.quote, x: e.x, y: e.y - 150, who: 'oldman', shout: true });
-      } else { e.vy = -520; e.vx = 220; e.spin = -12; e.state = 'dead'; }
+      } else if (src === 'pencil') { e.vy = 0; e.vx = 0; e.spin = 0; e.state = 'dead'; e.skewer = true; }
+      else { e.vy = -520; e.vx = 220; e.spin = -12; e.state = 'dead'; }
       this.emit('kill', { kind: e.kind, x: e.x, y: e.y - e.h / 2, pts, src });
     }
 
@@ -507,7 +520,7 @@
         if (pencilBox && e.kind === 'cat' && (U.overlap(pencilBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'pencil'); continue; }
         if (!U.overlap(pb, eb)) continue;
         if (bike) {
-          this.damageEnemy(e, e.kind === 'oldman' ? 2 : 99, 'bike');
+          this.damageEnemy(e, e.kind === 'oldman' ? 1 : 99, 'bike');
           continue;
         }
         const stompable = e.kind !== 'oldman';

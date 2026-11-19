@@ -213,7 +213,10 @@
           name: 'powerUp',
           weight: (w) => (!w.power.type && noWater(w) && !waterDue(w) && sp.cool.power <= 0 && w.t > 10 ? 2.2 : 0),
           run(x0, w) {
-            const kind = U.wpick([{ w: 0.3, k: 'bike' }, { w: 0.25, k: 'skis' }, { w: 0.17, k: 'sword' }, { w: 0.16, k: 'shield' }, { w: 0.22, k: 'pencil' }]).k;
+            // the very first power-up of a run is always the pencil (so it never goes unnoticed); after that it's a weighted draw
+            const kind = !sp.firstPowerDone ? 'pencil'
+              : U.wpick([{ w: 0.28, k: 'bike' }, { w: 0.22, k: 'skis' }, { w: 0.16, k: 'sword' }, { w: 0.15, k: 'shield' }, { w: 0.35, k: 'pencil' }]).k;
+            sp.firstPowerDone = true;
             const pw = 170; sp.plat(x0 + 70, 96, pw);
             sp.item(kind, x0 + 70 + pw / 2, GY - 96 - 34);
             sp.arc(x0 + 20, 4, 30, GY - 40, 50);
@@ -228,8 +231,8 @@
         },
         {
           name: 'heart',
-          weight: (w) => (w.hearts < C.MAX_HEARTS && sp.cool.heart <= 0 && w.t > 15 ? 1.4 : 0),
-          run(x0) { sp.arc(x0 + 40, 3, 34, GY - 30, 30); sp.item('heart', x0 + 140, GY - 90); sp.cool.heart = U.rand(30, 45); return 220; },
+          weight: (w) => (w.hearts < C.MAX_HEARTS && sp.cool.heart <= 0 && w.t > 12 ? 2.2 : 0),
+          run(x0) { sp.arc(x0 + 40, 3, 34, GY - 30, 30); sp.item('heart', x0 + 140, GY - 90); sp.cool.heart = U.rand(20, 32); return 220; },
         },
       ];
     }

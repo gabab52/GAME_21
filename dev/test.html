@@ -45,7 +45,7 @@ try {
   // spawn mix over a 120s bot run: count what exists in kinds
   const w2 = new Q.World(); const kinds = {};
   const inv = { ...{ } };
-  for (let i = 0; i < 60*100 && !w2.over; i++) { w2.hearts = 3; w2.update(1/60, Q.Bot.decide(w2)); for (const e of w2.enemies) kinds[e.kind] = 1; w2.events.length = 0;
+  for (let i = 0; i < 60*100 && !w2.over; i++) { w2.hearts = C.MAX_HEARTS; w2.update(1/60, Q.Bot.decide(w2)); for (const e of w2.enemies) kinds[e.kind] = 1; w2.events.length = 0;
     for (const it of w2.items) kinds['item:'+it.kind] = 1; for (const o of w2.obstacles) kinds['obst:'+o.kind]=1; if (w2.platforms.length) kinds.platform = 1; if (w2.power.type) kinds['power:'+w2.power.type] = 1; }
   out.push('SEEN IN 100s: '+Object.keys(kinds).sort().join(', '));
   out.push('ERRORS: '+(errs.length?errs.join(' | '):'none'));

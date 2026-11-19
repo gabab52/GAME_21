@@ -1,11 +1,11 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Francone, matita, meteorite</title>
 <style>body{margin:0;background:#c9e2d8}canvas{display:block}</style></head>
-<body><canvas id="c" width="1500" height="720"></canvas>
+<body><canvas id="c" width="1500" height="900"></canvas>
 <script src="../js/config.js"></script><script src="../js/util.js"></script><script src="../js/art.js"></script>
 <script>
 const A = Q.Art, ctx = document.getElementById('c').getContext('2d');
-ctx.fillStyle = '#c9e2d8'; ctx.fillRect(0, 0, 1500, 720);
+ctx.fillStyle = '#c9e2d8'; ctx.fillRect(0, 0, 1500, 900);
 ctx.fillStyle = '#2b3a58'; ctx.fillRect(0, 436, 1500, 6);
 function at(x, y, s, fn) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); fn(); ctx.restore(); }
 // Francone in each state, big (facing left like in the game) + hero next to him for scale
@@ -18,6 +18,14 @@ at(120, 700, 1.15, () => A.hero(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, e
 at(260, 700, 1, () => { ctx.scale(-1, 1); A.oldman(ctx, { t: 0.5, state: 'stalk' }); });
 at(380, 700, 1.15, () => A.hero(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'normal' }));
 at(500, 650, 1.3, () => A.powerBadge(ctx, 'pencil', 0.5));
+// Figaro impaled on the pencil, exactly as the game composes it: hero at 1.15x, cat 'dead' pinned at (hero.x+50, hero.y-3) tilted -0.25
+at(300, 880, 2.6, () => {
+  const px = 0, py = 0;
+  ctx.save(); ctx.translate(px + 50, py - 3); ctx.translate(0, -13); ctx.rotate(-0.25); ctx.translate(0, 13); ctx.scale(-1, 1); A.cat(ctx, { t: 0.3, state: 'dead' }); ctx.restore();
+  ctx.save(); ctx.translate(px, py); ctx.scale(1.15, 1.15); A.hero(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'happy', pencil: true }); ctx.restore();
+  ctx.font = '700 22px Bungee, Impact, sans-serif'; ctx.fillStyle = '#ff9ec4'; ctx.strokeStyle = '#1c2033'; ctx.lineWidth = 4; ctx.textAlign = 'center';
+  ctx.font = '700 14px Bungee, Impact, sans-serif'; ctx.lineWidth = 3; ctx.strokeText('BESTIACCIA!', px + 20, py - 78); ctx.fillText('BESTIACCIA!', px + 20, py - 78);
+});
 // meteorite: tail along the travel direction (down-left), rock, and bigger rock
 at(760, 620, 1, () => { ctx.rotate(Math.atan2(1, -0.5)); A.meteorTrail(ctx, 0.3); ctx.rotate(-Math.atan2(1, -0.5)); A.meteor(ctx, 0.3); });
 at(1000, 640, 2.4, () => A.meteor(ctx, 0.1));

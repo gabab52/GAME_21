@@ -27,7 +27,8 @@
     PX_PER_M: 50,
 
     // resources
-    MAX_HEARTS: 3,
+    MAX_HEARTS: 5,
+    START_HEARTS: 5,
     START_AMMO: 3,
     MAX_AMMO: 12,
     START_BOMBS: 1,
