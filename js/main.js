@@ -1,6 +1,6 @@
 /*
- * Main — game state machine (menu → playing ⇄ paused → over), main loop, HUD and the glue that
- * turns World events into sound, particles and UI. Gameplay rules live in world.js.
+ * Main — game state machine (title → menu → playing ⇄ paused → over), main loop, HUD, the character select and the
+ * glue that turns World events into sound, particles and UI. Gameplay rules live in world.js.
  */
 (function () {
   const Q = (globalThis.Q = globalThis.Q || {});
@@ -8,28 +8,45 @@
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
 
+  // ------------------------------------------------------------ progress (best scores, Sensei unlock)
+  // localStorage can be unavailable (private mode, file:// quirks): everything also lives in memory for the session.
+  const mem = {};
+  const store = {
+    get(k) { try { const v = localStorage.getItem(k); if (v != null) return v; } catch (_) {} return mem[k] != null ? mem[k] : null; },
+    set(k, v) { mem[k] = String(v); try { localStorage.setItem(k, String(v)); } catch (_) {} },
+  };
+  const ORDER = Q.CHAR_ORDER;
+  const bests = {};
+  ORDER.forEach((id) => { bests[id] = parseInt(store.get('game21.best.' + id) || '0', 10) || 0; });
+  // A character is playable if it isn't locked by default, or once it has been unlocked (finishing a run with Tullio unlocks the Sensei).
+  const unlocked = {};
+  ORDER.forEach((id) => { unlocked[id] = !Q.CHARS[id].locked || store.get('game21.unlocked.' + id) === '1'; });
+  if (params.has('unlock')) ORDER.forEach((id) => (unlocked[id] = true)); // debug: only for this session, never saved
+  // the highlighted character is Tullio by default. Debug: ?sel=sensei highlights him, ?char=sensei also unlocks him (this session only)
+  let sel = Math.max(0, ORDER.indexOf(params.get('sel') || params.get('char') || 'tullio'));
+  if (params.get('char') && ORDER[sel] === params.get('char')) unlocked[ORDER[sel]] = true;
+  const selId = () => ORDER[sel];
+
   // ------------------------------------------------------------ setup
   const canvas = $('game');
   const renderer = new Q.Renderer(canvas);
   const fx = new Q.FX();
-  let world = new Q.World();       // in 'menu' this is the attract-mode demo run by the bot
-  let mode = 'menu';               // menu | playing | paused | over
-  let best = 0;
+  // which world the attract-mode demo behind the menu shows: the highlighted character, unless he is still locked
+  const demoChar = () => (unlocked[selId()] ? selId() : ORDER[0]);
+  let world = new Q.World(demoChar());   // in 'menu' this is the attract-mode demo run by the bot
+  let mode = 'title';              // title | menu | playing | paused | over
   let hitstop = 0, timeScale = 1;
   let clock = 0, last = 0, musicTick = 0;
   let autoplay = params.has('autoplay');
   const ambient = { puff: 0, dust: 0 };
 
-  try { best = parseInt(localStorage.getItem('qedrun.best') || '0', 10) || 0; } catch (_) {}
-  $('bestMenu').textContent = best;
-
   // ------------------------------------------------------------ layout
   const app = $('app'), stage = $('stage'), controls = $('controls');
   const mobileLayout = matchMedia('(pointer: coarse), (any-pointer: coarse), (max-width: 700px), (max-width: 960px) and (max-height: 600px)');
-  let touchDetected = 'ontouchstart' in window;
+  let touchDetected = 'ontouchstart' in window || params.has('touch'); // ?touch forces the phone layout (handy for screenshots)
   let previousPortrait = null;
   function layout() {
-    const touch = touchDetected || mobileLayout.matches;
+    const touch = !params.has('notouch') && (touchDetected || mobileLayout.matches); // ?notouch forces the desktop layout (screenshots)
     document.body.classList.toggle('touch-on', touch);
     const viewport = window.visualViewport;
     const availW = viewport ? viewport.width : window.innerWidth;
@@ -88,7 +105,7 @@
   function drawHearts(n) {
     heartEls.forEach((cv, i) => icon(cv, (c, s) => { c.scale(s / 30, s / 30); Art.heart(c, 0, 1); }, i < n ? 1 : 0.2));
   }
-  function drawPowerIcon(kind) { icon(el.powerIcon, (c, s) => { c.scale(s / 52, s / 52); Art.powerBadge(c, kind, 0); }); }
+  function drawPowerIcon(kind) { icon(el.powerIcon, (c, s) => { c.scale(s / 52, s / 52); Art.powerBadge(c, kind, 0, world.charId); }); }
 
   function updateHud(w) {
     if (hud.score !== w.score) { hud.score = w.score; el.score.textContent = w.score.toLocaleString('en-US'); }
@@ -104,7 +121,7 @@
     const pt = w.power.type;
     if (pt !== hud.power) {
       hud.power = pt; el.power.classList.toggle('hidden', !pt);
-      if (pt) { drawPowerIcon(pt); el.powerLabel.textContent = C.POWER[pt].label; el.powerBar.style.background = C.POWER[pt].color; }
+      if (pt) { const info = Q.powerInfo(world.charId, pt); drawPowerIcon(pt); el.powerLabel.textContent = info.label; el.powerBar.style.background = info.color; }
     }
     if (pt) {
       const k = U.clamp(w.power.t / w.power.dur, 0, 1);
@@ -119,7 +136,7 @@
   }
 
   // ------------------------------------------------------------ screens
-  const screens = { menu: $('menu'), pause: $('pause'), over: $('over') };
+  const screens = { title: $('title'), menu: $('menu'), pause: $('pause'), over: $('over') };
   function show(name) {
     for (const k in screens) screens[k].classList.toggle('hidden', k !== name);
     const playing = mode === 'playing' || mode === 'paused';
@@ -127,9 +144,77 @@
     document.body.classList.toggle('hud-off', mode !== 'playing');
   }
 
-  function startGame() {
+  // ------------------------------------------------------------ character select
+  const pickEl = {
+    name: $('charName'), aka: $('charAka'), dots: $('charDots'), tips: $('tipsList'), mobileTip: $('mobileTip'), best: $('bestMenu'),
+    lock: $('lockOverlay'), portrait: $('portrait'), cv: $('portraitCv'), play: $('playBtn'),
+  };
+  const pcx = pickEl.cv.getContext('2d');
+  const ghost = document.createElement('canvas'); ghost.width = pickEl.cv.width; ghost.height = pickEl.cv.height; // for the locked silhouette
+  ORDER.forEach(() => pickEl.dots.appendChild(document.createElement('i')));
+
+  /** Retrigger a one-shot CSS animation class on an element. */
+  function kick(node, cls) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+
+  function renderPicker(dir) {
+    const id = selId(), ch = Q.CHARS[id], open = unlocked[id];
+    pickEl.name.textContent = ch.name;
+    pickEl.aka.textContent = open ? ch.aka : 'finisci una partita con Tullio';
+    pickEl.tips.innerHTML = ch.tips.map((t) => '<li>' + t + '</li>').join('');
+    pickEl.mobileTip.textContent = ch.mobileTip;
+    pickEl.best.textContent = bests[id].toLocaleString('en-US');
+    pickEl.lock.classList.toggle('hidden', open);
+    pickEl.play.classList.toggle('locked', !open);
+    pickEl.play.textContent = open ? '▶ PLAY' : '🔒 BLOCCATO';
+    [...pickEl.dots.children].forEach((d, i) => { d.classList.toggle('on', i === sel); d.classList.toggle('lk', !unlocked[ORDER[i]]); });
+    if (dir) { pickEl.portrait.classList.remove('slide-l', 'slide-r'); kick(pickEl.portrait, dir > 0 ? 'slide-r' : 'slide-l'); }
+    // the attract-mode demo behind the panel follows the highlighted character
+    if (mode === 'menu' && world.charId !== demoChar()) { world = new Q.World(demoChar()); fx.reset(); }
+  }
+  function changeChar(dir) {
+    if (mode !== 'menu') return;
+    sel = (sel + dir + ORDER.length) % ORDER.length;
     Sfx.resume(); Sfx.play('ui');
-    world = new Q.World(); fx.reset();
+    renderPicker(dir);
+  }
+
+  /** Draw the highlighted character (running on the spot) into the portrait; a black silhouette while he is locked. */
+  function drawPortrait(time) {
+    const id = selId(), open = unlocked[id], W = pickEl.cv.width, Hh = pickEl.cv.height;
+    pcx.setTransform(1, 0, 0, 1, 0, 0); pcx.clearRect(0, 0, W, Hh);
+    const target = open ? pcx : ghost.getContext('2d');
+    if (!open) { target.setTransform(1, 0, 0, 1, 0, 0); target.clearRect(0, 0, W, Hh); }
+    // ground shadow
+    pcx.fillStyle = 'rgba(0,0,0,0.25)'; pcx.beginPath(); pcx.ellipse(W / 2, Hh * 0.66 + 6, W * 0.2, 9, 0, 0, 7); pcx.fill();
+    target.save(); target.lineCap = 'round'; target.lineJoin = 'round';
+    target.translate(W / 2 - 4, Hh * 0.66); const k = W / 120; target.scale(k, k);
+    const base = { t: time, mode: 'run', air: false, vy: 0, expr: open ? 'happy' : 'normal', blink: (time % 3.4) < 0.12, runRate: 9 };
+    if (id === 'sensei') Art.sensei(target, base); else Art.hero(target, base);
+    target.restore();
+    if (!open) { // silhouette: keep the shape, paint it dark
+      target.globalCompositeOperation = 'source-in'; target.fillStyle = '#10142a'; target.fillRect(0, 0, W, Hh); target.globalCompositeOperation = 'source-over';
+      pcx.globalAlpha = 0.92; pcx.drawImage(ghost, 0, 0); pcx.globalAlpha = 1;
+    }
+  }
+
+  // ------------------------------------------------------------ flow
+  function toMenu() {
+    Sfx.play('ui'); Sfx.stopMusic(); Sfx.setEngine(false);
+    mode = 'menu'; world = new Q.World(demoChar()); fx.reset(); renderPicker(0); show('menu');
+  }
+  /** Title screen → character select (any key / click / tap). */
+  function leaveTitle() {
+    if (mode !== 'title') return;
+    Sfx.resume(); Sfx.play('ui');
+    mode = 'menu'; world = new Q.World(demoChar()); fx.reset(); renderPicker(0); show('menu');
+  }
+
+  function startGame() {
+    if (mode === 'menu' && !unlocked[selId()]) { // the Sensei is still locked: "non sei ancora degno"
+      Sfx.resume(); Sfx.play('empty'); kick(pickEl.play, 'shake'); kick(pickEl.portrait, 'shake'); return;
+    }
+    Sfx.resume(); Sfx.play('ui');
+    world = new Q.World(selId()); fx.reset();
     hud.score = hud.dist = hud.money = hud.ammo = hud.bombs = hud.hearts = -1; hud.power = null; hud.low = false;
     el.power.classList.add('hidden'); el.banner.className = 'banner';
     hitstop = 0; timeScale = 1; ambient.puff = ambient.dust = 0;
@@ -140,26 +225,24 @@
   }
   function setPaused(p) {
     if (p && mode === 'playing') { mode = 'paused'; show('pause'); Sfx.play('pause'); Sfx.stopMusic(); Sfx.setEngine(false); Input.clearHeld(); }
-    else if (!p && mode === 'paused') { mode = 'playing'; show(null); Sfx.play('pause'); Sfx.startMusic(); if (world.power.type === 'bike') Sfx.setEngine(true, world.speedMul); Input.clearEdges(); }
-  }
-  function toMenu() {
-    Sfx.play('ui'); Sfx.stopMusic(); Sfx.setEngine(false);
-    world = new Q.World(); fx.reset(); mode = 'menu'; show('menu');
+    else if (!p && mode === 'paused') { mode = 'playing'; show(null); Sfx.play('pause'); Sfx.startMusic(); if (world.power.type === 'bike' && world.charId !== 'sensei') Sfx.setEngine(true, world.speedMul); Input.clearEdges(); }
   }
   function gameOver() {
     mode = 'over';
-    const isBest = world.score > best;
-    if (isBest) { best = world.score; try { localStorage.setItem('qedrun.best', String(best)); } catch (_) {} }
+    const id = world.charId, ch = Q.CHARS[id];
+    const isBest = world.score > bests[id];
+    if (isBest) { bests[id] = world.score; store.set('game21.best.' + id, bests[id]); }
+    // finishing a run with Tullio is what makes the Sensei worthy
+    let justUnlocked = false;
+    if (id === ORDER[0]) ORDER.forEach((o) => { if (!unlocked[o]) { unlocked[o] = true; store.set('game21.unlocked.' + o, '1'); justUnlocked = true; } });
     $('finalScore').textContent = world.score.toLocaleString('en-US');
     $('finalMoney').textContent = '€' + world.money;
     $('finalDist').textContent = Math.floor(world.meters) + ' m';
-    $('finalBest').textContent = best.toLocaleString('en-US');
+    $('finalBest').textContent = bests[id].toLocaleString('en-US');
     $('newBest').classList.toggle('hidden', !isBest);
-    $('quip').textContent = U.pick([
-      'Va tutto male.', 'Il lemma era banale, in realtà.', 'Figaro ti manda i suoi saluti.', 'Dimostrazione non convergente.',
-      'Francone ha mangiato bene.', 'Ricorda: ogni caduta è un controesempio.', 'Q.E.D. (Quasi Eri Dentro)',
-    ]);
-    $('bestMenu').textContent = best;
+    $('unlockNote').classList.toggle('hidden', !justUnlocked);
+    $('quip').textContent = U.pick(ch.quips);
+    pickEl.best.textContent = bests[selId()].toLocaleString('en-US');
     show('over');
   }
 
@@ -168,6 +251,11 @@
   $('menuBtn1').addEventListener('click', toMenu);
   $('menuBtn2').addEventListener('click', toMenu);
   $('playBtn').addEventListener('click', startGame);
+  $('prevChar').addEventListener('click', () => changeChar(-1));
+  $('nextChar').addEventListener('click', () => changeChar(1));
+  pickEl.portrait.addEventListener('click', () => changeChar(1));
+  $('title').addEventListener('click', leaveTitle);
+  $('logo').addEventListener('error', () => $('title').classList.add('no-logo')); // no logo.png next to index.html: fall back to text
   $('resumeBtn').addEventListener('click', () => setPaused(false));
   $('restartBtn1').addEventListener('click', startGame);
   $('restartBtn2').addEventListener('click', startGame);
@@ -176,7 +264,10 @@
   function toggleMute() { Sfx.resume(); Sfx.setMuted(!Sfx.muted); $('muteBtn').textContent = Sfx.muted ? '✕' : '♪'; }
   Input.on('mute', toggleMute);
   Input.on('pause', () => { if (mode === 'playing') setPaused(true); else if (mode === 'paused') setPaused(false); });
-  Input.on('confirm', () => { if (mode === 'menu' || mode === 'over') startGame(); else if (mode === 'paused') setPaused(false); });
+  Input.on('confirm', () => { if (mode === 'title') leaveTitle(); else if (mode === 'menu' || mode === 'over') startGame(); else if (mode === 'paused') setPaused(false); });
+  Input.on('jump', () => { if (mode === 'title') leaveTitle(); });
+  Input.on('left', () => changeChar(-1));
+  Input.on('right', () => changeChar(1));
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyR' && !e.repeat && (mode === 'over' || mode === 'paused')) startGame(); });
   window.addEventListener('blur', () => setPaused(true));
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
@@ -197,13 +288,15 @@
       case 'heart_pick': Sfx.play('heart'); fx.text(e.x, e.y - 20, '+1 ♥', { color: '#ff6b8b', size: 20, life: 0.9 }); fx.burst(e.x, e.y, { n: 10, color: ['#ff4d6d', '#ffc2d1'], min: 60, max: 200, life: 0.6, size: 4, grav: -50 }); break;
       case 'power_pick': Sfx.play('pickup'); fx.ring(e.x, e.y, C.POWER[e.kind].color, 12, 0.5); break;
       case 'power_start': {
-        Sfx.play(e.kind === 'pencil' ? 'scribble' : 'power'); fx.doFlash(C.POWER[e.kind].color, 0.35);
-        const label = { bike: 'VESPA!', skis: 'SKIS!', sword: 'SWORD!', shield: 'SCUDETTO!', pencil: 'MATITA!' }[e.kind];
-        banner(label, e.kind === 'skis' ? 'teal' : e.kind === 'shield' ? 'gold' : e.kind === 'pencil' ? 'pink' : '');
-        if (e.kind === 'shield') fx.text(p.x, p.y - 100, 'Forza Roma!', { color: '#f7c52b', size: 22, life: 1.4 });
+        const sen = world.charId === 'sensei', info = Q.powerInfo(world.charId, e.kind);
+        Sfx.play(e.kind === 'pencil' ? 'scribble' : 'power'); fx.doFlash(info.color, 0.35);
+        banner(world.char.banners[e.kind], e.kind === 'skis' ? 'teal' : e.kind === 'shield' ? (sen ? 'red' : 'gold') : e.kind === 'pencil' || (sen && e.kind === 'bike') ? 'pink' : '');
+        if (e.kind === 'shield') fx.text(p.x, p.y - 100, sen ? 'Compagni, avanti!' : 'Forza Roma!', { color: sen ? '#ffd23f' : '#f7c52b', size: 22, life: 1.4 });
         if (e.kind === 'pencil') fx.text(p.x + 10, p.y - 100, 'Buca tutto!', { color: '#ff9ec4', size: 22, life: 1.4 });
-        fx.burst(p.x, p.y - 30, { n: 22, color: [C.POWER[e.kind].color, '#fff'], shape: 'star', min: 80, max: 320, life: 0.7, size: 5, grav: 100 });
-        if (e.kind === 'bike') Sfx.setEngine(true, world.speedMul);
+        if (sen && e.kind === 'sword') fx.text(p.x + 10, p.y - 100, 'Fatti sotto!', { color: '#ffd166', size: 22, life: 1.4 });
+        if (sen && e.kind === 'bike') { Sfx.play('giggle'); fx.text(p.x + 30, p.y - 100, 'Cecilia', { color: '#ff9ec4', size: 30, life: 2 }); }
+        fx.burst(p.x, p.y - 30, { n: 22, color: [info.color, '#fff'], shape: 'star', min: 80, max: 320, life: 0.7, size: 5, grav: 100 });
+        if (e.kind === 'bike' && !sen) Sfx.setEngine(true, world.speedMul); // the Vespa has an engine; the passeggino doesn't
         break;
       }
       case 'power_end':
@@ -223,7 +316,10 @@
         Sfx.play('pop');
         fx.burst(e.x, e.y, { n: 12, color: ['#fff', '#e8eef8'], shape: 'smoke', size: 8, min: 20, max: 120, life: 0.5, grav: -30, grow: 28 });
         fx.burst(e.x, e.y, { n: 8, color: ['#ffd166', '#fff'], shape: 'star', size: 5, min: 60, max: 220, life: 0.6, grav: 60 });
-        fx.text(e.x, e.y - 52, e.swim ? 'COSTUME!' : 'VIA IL COSTUME!', { color: e.swim ? '#8fe3f7' : '#ffd166', size: 18, life: 0.9 });
+        if (e.skate != null) { // the ice rink: "tavola d'acqua"
+          if (e.skate) { Sfx.play('iceEnter'); banner("TAVOLA D'ACQUA!", 'teal'); }
+          fx.text(e.x, e.y - 52, e.skate ? 'PATTINI!' : 'VIA I PATTINI!', { color: e.skate ? '#8fe3f7' : '#ffd166', size: 18, life: 0.9 });
+        } else fx.text(e.x, e.y - 52, e.swim ? 'COSTUME!' : 'VIA IL COSTUME!', { color: e.swim ? '#8fe3f7' : '#ffd166', size: 18, life: 0.9 });
         break;
       case 'stroke': Sfx.play('stroke'); fx.burst(e.x, e.y - 6, { n: 4, color: ['#fff', '#8fe3f7'], shape: 'dot', size: 3, min: 30, max: 110, dir: Math.PI / 2, spread: 0.8, life: 0.5, grav: -60 }); break;
       case 'throw': Sfx.play('throw'); break;
@@ -236,32 +332,45 @@
         break;
       }
       case 'speech':
-        fx.bubble(e.x, e.y, e.text, 1.3, e.who, e.shout);
+        fx.bubble(e.x, e.y, e.text, e.who === 'sensei' ? 2.2 : 1.3, e.who, e.shout);
         if (e.who === 'oldman') Sfx.say(e.text, { rate: 1.08, pitch: 0.8, soft: true }); // his catchphrases, out loud
+        if (e.who === 'sensei') Sfx.say(e.text.toLowerCase(), { rate: 0.92, pitch: 0.55 });   // "avete fatto di testa vostra"
+        if (e.who === 'hall') Sfx.say(e.text, { rate: 1, pitch: 1.05, soft: true, lang: 'en-GB' }); // Mr. Hall: "Modifica painful", "as is"
         break;
+      case 'squeak': Sfx.play('squeak'); fx.text(e.x, e.y - 30, 'SQUIK!', { color: '#ffd166', size: 15, life: 0.6 }); break;
       case 'hiss': Sfx.play('hiss'); fx.text(e.x, e.y - 30, 'HSSS!', { color: '#c6ef4a', size: 15, life: 0.6 }); break;
       case 'kill': {
         hitstop = Math.max(hitstop, 0.07); fx.doShake(e.src === 'bomb' ? 8 : 9);
         Sfx.play('kill');
         fx.text(e.x, e.y - 26, '+' + e.pts, { color: '#ffd166', size: 24, life: 1 });
         if (e.kind === 'oldman') {
-          fx.text(e.x, e.y - 70, 'Q.E.D. ∎', { color: '#fff', size: 30, life: 1.4, vy: -30 });
+          fx.text(e.x, e.y - 70, 'GAME_21 ∎', { color: '#fff', size: 30, life: 1.4, vy: -30 });
           fx.burst(e.x, e.y, { n: 14, color: '#fffef7', shape: 'paper', size: 8, min: 80, max: 360, life: 1.2, grav: 300 });
           fx.burst(e.x, e.y, { n: 16, color: '#f6f5ef', shape: 'feather', size: 9, min: 80, max: 300, life: 1, grav: 150 }); // beard hair
           fx.burst(e.x, e.y, { n: 10, color: ['#ffd166', '#fff'], shape: 'star', size: 6, min: 100, max: 360, life: 0.7, grav: 100 });
           fx.parts.push({ x: e.x, y: e.y - 40, vx: -160, vy: -520, life: 1.4, max: 1.4, size: 8, color: '#000', shape: 'glasses', grav: 1300, drag: 0, rot: 0, vr: 10 });
+        } else if (e.kind === 'hall') { // Mr. Hall: his papers fly, the glasses and the red pen go flying
+          fx.burst(e.x, e.y, { n: 16, color: '#fffef7', shape: 'paper', size: 8, min: 80, max: 360, life: 1.2, grav: 300 });
+          fx.burst(e.x, e.y, { n: 10, color: ['#e63946', '#fff'], shape: 'chip', size: 7, min: 100, max: 340, life: 0.9, grav: 400 });
+          fx.burst(e.x, e.y, { n: 10, color: ['#ffd166', '#fff'], shape: 'star', size: 6, min: 100, max: 360, life: 0.7, grav: 100 });
+          fx.parts.push({ x: e.x, y: e.y - 40, vx: -160, vy: -520, life: 1.4, max: 1.4, size: 8, color: '#a9d4f0', shape: 'glasses', grav: 1300, drag: 0, rot: 0, vr: 10 });
         } else if (e.kind === 'cat') {
           if (e.src === 'pencil') { Sfx.play('pierce'); fx.text(e.x - 30, e.y - 70, 'BESTIACCIA!', { color: '#ff9ec4', size: 26, life: 1.2 }); }
           else fx.text(e.x, e.y - 70, 'MIAO?!', { color: '#c6ef4a', size: 22, life: 1.1 });
           fx.burst(e.x, e.y, { n: 12, color: ['#1b1b22', '#f7f7f7'], shape: 'feather', size: 7, min: 80, max: 280, life: 0.9, grav: 200 });
+          fx.burst(e.x, e.y, { n: 6, color: ['#ffd166', '#fff'], shape: 'star', size: 5, min: 100, max: 300, life: 0.6, grav: 100 });
+        } else if (e.kind === 'chip') {
+          if (e.src === 'pencil') { Sfx.play('pierce'); fx.text(e.x - 30, e.y - 60, 'BESTIACCIA!', { color: '#ff9ec4', size: 24, life: 1.2 }); }
+          else fx.text(e.x, e.y - 56, e.who === 'ciop' ? 'CIOP!' : 'CIP!', { color: '#ffd166', size: 22, life: 1.1 });
+          fx.burst(e.x, e.y, { n: 12, color: ['#b87333', '#f6e3bf', '#6e3f1a'], shape: 'feather', size: 6, min: 80, max: 280, life: 0.9, grav: 200 });
           fx.burst(e.x, e.y, { n: 6, color: ['#ffd166', '#fff'], shape: 'star', size: 5, min: 100, max: 300, life: 0.6, grav: 100 });
         }
         break;
       }
       case 'stomp': Sfx.play('stomp'); fx.text(e.x, e.y - 24, 'BOING!', { color: '#fff', size: 18, life: 0.6 }); break;
       case 'smash':
-        Sfx.play(e.src === 'pencil' ? 'pierce' : 'smash'); fx.doShake(e.src === 'pencil' ? 3 : 5);
-        fx.burst(e.x, e.y, { n: 12, color: e.kind === 'cone' ? ['#ff8a3d', '#fff'] : e.kind === 'buoy' ? ['#ff4d4d', '#fff'] : ['#3a86ff', '#ef476f', '#06d6a0', '#fff'], shape: 'sq', size: 6, min: 100, max: 340, life: 0.7, grav: 700 });
+        Sfx.play(e.src === 'pencil' ? 'pierce' : world.charId === 'sensei' && world.power.type === 'sword' ? 'whack' : 'smash'); fx.doShake(e.src === 'pencil' ? 3 : 5);
+        fx.burst(e.x, e.y, { n: 12, color: e.kind === 'cone' ? ['#ff8a3d', '#fff'] : e.kind === 'buoy' ? ['#ff4d4d', '#fff'] : e.kind === 'wing' ? ['#e6e8ec', '#fff', '#8a93a3', '#1c2033'] : ['#3a86ff', '#ef476f', '#06d6a0', '#fff'], shape: 'sq', size: 6, min: 100, max: 340, life: 0.7, grav: 700 });
         if (e.src === 'pencil') { // pencil shavings + graphite dust
           fx.burst(e.x, e.y, { n: 8, color: ['#ffd23f', '#f2c999', '#2b2f3f'], shape: 'chip', size: 6, min: 120, max: 360, life: 0.7, grav: 500 });
           fx.text(e.x, e.y - 30, 'SPUNTITO!', { color: '#ff9ec4', size: 18, life: 0.8 }); // the pencil gets blunted
@@ -298,10 +407,12 @@
       case 'warn': Sfx.play('warn'); break;
       case 'chomp': Sfx.play('chomp'); break;
       case 'meow': Sfx.play('meow'); break;
-      case 'oldman_leave': fx.bubble(e.x, e.y, 'Mah! Ci rinuncio.', 1.4); break;
+      case 'oldman_leave': if (e.who !== 'hall') fx.bubble(e.x, e.y, 'Mah! Ci rinuncio.', 1.4); break;
       case 'enemy_spawn':
         if (e.kind === 'oldman') { banner('FRANCONE!', 'red'); Sfx.play('grumble'); }
+        else if (e.kind === 'hall') { banner('MR. HALL!', 'red'); Sfx.play('warn'); }
         else if (e.kind === 'cat') { banner('FIGARO!', ''); }
+        else if (e.kind === 'chip') { banner('CIP E CIOP!', ''); }
         break;
       case 'gameover': gameOver(); break;
     }
@@ -316,13 +427,18 @@
       fx.burst(m.x, m.y, { n: 2, color: ['#ffb703', '#ff6b3d', 'rgba(90,70,60,0.8)'], shape: 'dot', size: 4, min: 20, max: 90, dir: Math.atan2(-m.vy, -m.vx), spread: 0.5, life: 0.45, grav: 40 });
     }
     if (p.dead) return;
+    if (p.skate && p.onGround) { // blades on the ice: a fine white spray, more of it the faster he glides sideways
+      ambient.ice = (ambient.ice || 0) - dt;
+      if (ambient.ice <= 0) { ambient.ice = 0.05; const sp = Math.min(1, Math.abs(p.vx) / 150); fx.burst(p.x - 6, p.y - 1, { n: 1 + Math.round(sp * 2), color: ['#fff', '#d9f3ff'], shape: 'dot', size: 2.4, min: 30, max: 90 + sp * 120, dir: p.vx > 0 ? Math.PI + 0.35 : -0.35, spread: 0.5, life: 0.4, grav: 160 }); }
+    }
     if (t === 'pencil' && p.onGround && !p.swim) {
       ambient.puff -= dt;
       if (ambient.puff <= 0) { ambient.puff = 0.07; fx.burst(p.x + 58, p.y - 21, { n: 1, color: ['#2b2f3f', '#8c8f9c'], shape: 'dot', size: 2.4, min: 20, max: 80, dir: -0.4, spread: 0.6, life: 0.4, grav: 200 }); }
     } else if (t === 'bike') {
       ambient.puff -= dt;
-      if (ambient.puff <= 0) { ambient.puff = 0.045; fx.burst(p.x - 46, p.y - 13, { n: 1, color: 'rgba(210,214,224,0.8)', shape: 'smoke', size: 5, min: 20, max: 70, dir: Math.PI, spread: 0.3, life: 0.45, grav: -30, grow: 14 }); }
-      Sfx.setEngine(true, w.speedMul);
+      if (w.charId === 'sensei') { if (ambient.puff <= 0 && p.onGround) { ambient.puff = 0.06; fx.burst(p.x - 60, p.y - 3, { n: 1, color: 'rgba(255,255,255,0.6)', shape: 'dot', size: 2.6, min: 20, max: 90, dir: Math.PI + 0.3, spread: 0.5, life: 0.4, grav: -10 }); } }
+      else if (ambient.puff <= 0) { ambient.puff = 0.045; fx.burst(p.x - 46, p.y - 13, { n: 1, color: 'rgba(210,214,224,0.8)', shape: 'smoke', size: 5, min: 20, max: 70, dir: Math.PI, spread: 0.3, life: 0.45, grav: -30, grow: 14 }); }
+      if (w.charId !== 'sensei') Sfx.setEngine(true, w.speedMul);
     } else if (t === 'skis' && p.onGround) {
       ambient.puff -= dt;
       if (ambient.puff <= 0) { ambient.puff = 0.03; fx.burst(p.x - 26, p.y - 3, { n: 2, color: ['#fff', '#d6f1ff'], shape: 'dot', size: 3, min: 60, max: 200, dir: Math.PI + 0.5, spread: 0.5, life: 0.4, grav: 300 }); }
@@ -348,6 +464,7 @@
   /** One simulated + rendered frame. (Separate from `frame` so tests can drive time manually.) */
   function tick(rdt) {
     clock += rdt;
+    if (mode === 'title') return; // the logo screen is static HTML: nothing to simulate or draw underneath
 
     if (mode === 'playing' || mode === 'over' || mode === 'menu') {
       let dt = rdt;
@@ -365,7 +482,7 @@
         if (mode === 'menu') { world.hearts = Math.max(world.hearts, 2); if (world.bombs < 1) world.bombs = 1; }
         world.update(dt, inp);
         const evs = world.events; world.events = [];
-        if (mode === 'menu') { /* attract mode is silent */ for (const e of evs) if (e.type !== 'gameover') visualOnly(e); if (world.over) world = new Q.World(); }
+        if (mode === 'menu') { /* attract mode is silent */ for (const e of evs) if (e.type !== 'gameover') visualOnly(e); if (world.over) world = new Q.World(demoChar()); }
         else for (const e of evs) handle(e);
         if (mode !== 'menu') ambientFx(world, dt);
       }
@@ -377,6 +494,7 @@
       }
     }
     renderer.render(world, fx, clock);
+    if (mode === 'menu') drawPortrait(clock);
   }
   /** attract-mode: only the cheap visual reactions (no sound, no banners) */
   function visualOnly(e) {
@@ -388,10 +506,15 @@
   }
 
   // ------------------------------------------------------------ boot
-  Q.game = { get world() { return world; }, fx, renderer, get mode() { return mode; }, startGame, tick };
+  Q.game = {
+    get world() { return world; }, fx, renderer, get mode() { return mode; }, startGame, tick, toMenu, leaveTitle, changeChar,
+    get selected() { return selId(); }, unlocked, bests,
+  };
   layout();
-  show('menu');
+  renderPicker(0);
   if (autoplay || params.has('start')) startGame();
+  else if (params.has('menu')) { mode = 'menu'; world = new Q.World(demoChar()); renderPicker(0); show('menu'); }
+  else show('title');
   // dev conveniences for screenshots/tests: ?autoplay&give=bike|skis|sword&t=40
   if (mode === 'playing') {
     if (params.get('t')) world.t = parseFloat(params.get('t'));
@@ -403,7 +526,10 @@
     if (g && C.POWER[g]) { world.startPower(g); for (let n = 0; n < 60 * parseFloat(params.get('after') || '0.6'); n++) { world.update(1 / 60, Q.Bot.decide(world)); world.events.length = 0; } }
     const step = (secs, inp) => { for (let n = 0; n < secs * 60; n++) { world.update(1 / 60, inp || Q.Bot.decide(world)); world.events.length = 0; } };
     if (params.has('swim')) { world.water.push({ x: 20, w: 1500 }); step(parseFloat(params.get('swim')) || 1.0); }
+    if (params.has('ice')) { world.ice.push({ x: 20, w: 1500 }); step(parseFloat(params.get('ice')) || 1.0); }
+    if (params.has('chips')) { world.spawnChips(); step(parseFloat(params.get('chips')) || 1.4); }
     if (params.has('oldman')) { world.spawnOldMan(); step(parseFloat(params.get('oldman')) || 2.6); }
+    if (params.has('hall')) { world.spawnHall(); step(parseFloat(params.get('hall')) || 2.6); }
     if (params.has('cat')) { world.spawnCat(); step(parseFloat(params.get('cat')) || 1.2); }
     if (params.has('meteor')) { world.spawnMeteor(); step(parseFloat(params.get('meteor')) || 0.6); }
     if (params.has('bomb')) {
@@ -414,7 +540,7 @@
     fx.reset();
     // &hit: Francone takes a paper right now (shows his speech bubble)
     if (params.has('hit')) {
-      const old = world.enemies.find((o) => o.kind === 'oldman' && !o.dead);
+      const old = world.enemies.find((o) => (o.kind === 'oldman' || o.kind === 'hall') && !o.dead);
       if (old) { world.damageEnemy(old, 1, 'paper'); const evs = world.events; world.events = []; evs.forEach(handle); step(0.15); fx.bubbles.forEach((b) => (b.life = 99)); }
     }
   }

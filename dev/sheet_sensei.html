@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>sprite sheet — Sensei</title>
+<style>body{margin:0;background:#b9d6cc}canvas{display:block}</style></head>
+<body><canvas id="c" width="1800" height="1000"></canvas>
+<script src="../js/config.js"></script><script src="../js/util.js"></script><script src="../js/art.js"></script><script src="../js/art_sensei.js"></script>
+<script>
+const A = Q.Art, ctx = document.getElementById('c').getContext('2d');
+ctx.fillStyle = '#c9e2d8'; ctx.fillRect(0, 0, 1800, 1000);
+ctx.fillStyle = '#2b3a58'; [250, 520, 790, 980].forEach((y) => ctx.fillRect(0, y, 1800, 5));
+function at(x, y, s, fn) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); fn(); ctx.restore(); }
+const S = 2.9;
+// row 1: the Sensei on foot — run frames, jump, throw, bomb pose, hurt, happy, shout, dead
+[0, 0.5, 1.0, 1.6].forEach((p, i) => at(70 + i * 120, 250, S, () => A.sensei(ctx, { t: p, mode: 'run', air: false, vy: 0, expr: 'normal' })));
+at(600, 250, S, () => A.sensei(ctx, { t: 0.2, mode: 'run', air: true, vy: -300, expr: 'shout' }));
+at(720, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'run', air: false, vy: 0, expr: 'normal', throwP: 0.8 }));
+at(840, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'run', air: false, vy: 0, expr: 'shout', raise: 1 }));
+at(960, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'run', air: true, vy: 200, expr: 'hurt' }));
+at(1080, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'run', air: false, vy: 0, expr: 'happy', raise: 1 }));
+at(1230, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'staff', air: false, vy: 0, expr: 'focus' }));
+at(1400, 250, S, () => A.sensei(ctx, { t: 0.3, mode: 'skis', air: false, vy: 0, expr: 'focus' }));
+at(1560, 220, S, () => { ctx.rotate(1.2); A.sensei(ctx, { t: 0.3, mode: 'run', air: true, vy: 0, expr: 'dead' }); });
+at(1700, 170, 6.5, () => A.sensei(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'normal' }));
+// row 2: skating (ice), pencil, stroller, chipmunks
+ctx.fillStyle = '#bfe6f6'; ctx.fillRect(0, 520, 560, 8);
+[0, 0.4, 0.8].forEach((p, i) => at(70 + i * 125, 520, S, () => A.sensei(ctx, { t: p, mode: 'run', air: false, vy: 0, expr: 'normal', skate: true })));
+at(470, 520, S, () => A.sensei(ctx, { t: 0.3, mode: 'run', air: false, vy: 0, expr: 'normal', pencil: true }));
+at(720, 520, S * 0.9, () => A.stroller(ctx, { t: 0.2, expr: 'happy' }));
+at(1020, 520, S * 0.9, () => A.stroller(ctx, { t: 0.55, expr: 'happy' }));
+['run', 'crouch', 'leap'].forEach((st, i) => at(1250 + i * 95, 520, S, () => { ctx.scale(-1, 1); A.chip(ctx, { t: 0.3, state: st, who: 'cip' }); }));
+['run', 'crouch', 'leap'].forEach((st, i) => at(1250 + i * 95, 390, S, () => { ctx.scale(-1, 1); A.chip(ctx, { t: 0.3, state: st, who: 'ciop' }); }));
+at(1620, 520, S, () => { A.chip(ctx, { t: 0.3, state: 'dead', who: 'cip' }); });
+// row 3: items
+at(110, 790, S, () => A.wingProfile(ctx, 0.3));
+at(420, 790, 2.2, () => A.staff(ctx, 54, 1, 0.3));
+at(700, 740, S * 1.4, () => A.hammerSickle(ctx));
+['bike', 'skis', 'sword', 'shield', 'pencil'].forEach((k, i) => at(840 + i * 100, 740, S * 0.9, () => A.powerBadge(ctx, k, 0.5, 'sensei')));
+at(1400, 790, S, () => A.cone(ctx));
+// the small in-game sizes (1.15x hero scale / 1x others) on a strip
+ctx.fillStyle = '#c8d6e8'; ctx.fillRect(0, 900, 1800, 80);
+at(60, 980, 1.15, () => A.sensei(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'normal' }));
+at(150, 980, 1.15, () => A.sensei(ctx, { t: 0.1, mode: 'run', air: false, vy: 0, expr: 'normal', skate: true }));
+at(250, 980, 1.15, () => A.sensei(ctx, { t: 0.3, mode: 'staff', air: false, vy: 0, expr: 'focus' }));
+at(420, 980, 1, () => A.stroller(ctx, { t: 0.3, expr: 'happy' }));
+at(560, 980, 1, () => { ctx.scale(-1, 1); A.chip(ctx, { t: 0.3, state: 'run', who: 'cip' }); });
+at(620, 980, 1, () => { ctx.scale(-1, 1); A.chip(ctx, { t: 0.3, state: 'run', who: 'ciop' }); });
+at(700, 980, 1, () => A.wingProfile(ctx, 0.3));
+at(760, 980, 1, () => A.cone(ctx));
+// Mr. Hall (small, in-game size) next to Francone
+['stalk', 'windup', 'lunge', 'stun'].forEach((st, i) => at(900 + i * 70, 980, 0.8, () => { ctx.scale(-1, 1); A.hall(ctx, { t: 0.4 + i, state: st }); }));
+at(1220, 980, 0.8, () => { ctx.scale(-1, 1); A.oldman(ctx, { t: 0.4, state: 'stalk' }); });
+</script></body></html>

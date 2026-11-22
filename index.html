@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>QED RUN</title>
+  <title>GAME_21</title>
+  <link rel="icon" href="logo.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -52,17 +53,40 @@
         </div>
       </div>
 
-      <!-- ============ Start screen ============ -->
-      <div id="menu" class="screen">
+      <!-- ============ Title screen (logo) ============ -->
+      <div id="title" class="screen title-screen">
+        <div class="logo-wrap">
+          <img id="logo" class="logo" src="logo.png" alt="GAME_21" draggable="false">
+          <div class="logo-fallback title"><span>GAME</span>_21</div>
+        </div>
+        <div class="press"><b>PREMI INVIO</b><span class="kb"> · </span><span>tocca lo schermo</span></div>
+      </div>
+
+      <!-- ============ Character select ============ -->
+      <div id="menu" class="screen hidden">
         <div class="panel menu-panel">
-          <div class="title"><span>QED</span> RUN</div>
-          <div class="tagline">Va tutto male. Corri comunque.</div>
-          <button id="playBtn" class="btn primary">▶ PLAY</button>
-          <div class="grid">
+          <div class="picker">
+            <div class="title"><span>GAME</span>_21</div>
+            <div class="pick-label">SCEGLI IL PERSONAGGIO</div>
+            <div class="pick-row">
+              <button id="prevChar" class="arrow" aria-label="Personaggio precedente">◀</button>
+              <div class="portrait" id="portrait">
+                <canvas id="portraitCv" width="360" height="360"></canvas>
+                <div class="lock hidden" id="lockOverlay"><span class="lock-ico">🔒</span><b>NON SEI ANCORA DEGNO</b></div>
+              </div>
+              <button id="nextChar" class="arrow" aria-label="Personaggio successivo">▶</button>
+            </div>
+            <div class="char-name" id="charName">TULLIO</div>
+            <div class="char-aka" id="charAka">aka Carlo · aka Maria · aka Capitano</div>
+            <div class="dots" id="charDots"></div>
+            <button id="playBtn" class="btn primary">▶ PLAY</button>
+            <div class="best">Best <b id="bestMenu">0</b></div>
+          </div>
+          <div class="info">
             <div class="card">
               <h3>Controls</h3>
               <ul class="keys">
-                <li><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd><span>move</span></li>
+                <li><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd><span>move · in the menu: change character</span></li>
                 <li><kbd>SPACE</kbd><span>jump (twice!)</span></li>
                 <li><kbd>X</kbd><span>throw a paper</span></li>
                 <li><kbd>Z</kbd><span>bomb</span></li>
@@ -72,14 +96,7 @@
             </div>
             <div class="card">
               <h3>Survive</h3>
-              <ul class="tips">
-                <li><b class="c1">Francone</b>, the tall bearded old man, wants to eat you. Grab maths <b>∫ papers</b>, throw them at his face.</li>
-                <li><b class="c2">Figaro</b> the cat pounces. Jump on him or paper him.</li>
-                <li><b class="c7">RSE meteorite!</b> A rock falls on the red mark: step aside, or lose a heart.</li>
-                <li><b class="c3">Vespa · Skis · Sword</b>: speed boosts. The sword kills everything it touches. The <b class="c5">Scudetto</b> blocks everything. The <b class="c7">Pencil</b> pierces every obstacle.</li>
-                <li><b class="c4">Bomb</b>: makes everything go wrong. For them.</li>
-                <li><b class="c6">Pool ahead?</b> Swimsuit on! Tap jump to paddle.</li>
-              </ul>
+              <ul class="tips" id="tipsList"></ul>
             </div>
           </div>
           <div class="mobile-guide">
@@ -87,9 +104,8 @@
             <p><b>Muoviti</b><span>Usa le frecce a sinistra.</span></p>
             <p><b>Salta</b><span>Tocca un punto qualsiasi dello schermo. Tocca di nuovo in aria per il doppio salto.</span></p>
             <p><b>Difenditi</b><span>Lancia i fogli e usa la bomba con i tasti a sinistra.</span></p>
-            <div class="mobile-tip">Raccogli monete e potenziamenti. Occhio a Francone e Figaro!</div>
+            <div class="mobile-tip" id="mobileTip">Raccogli monete e potenziamenti. Occhio a Francone e Figaro!</div>
           </div>
-          <div class="best">Best <b id="bestMenu">0</b></div>
         </div>
       </div>
 
@@ -110,6 +126,7 @@
           <div class="big red">GAME OVER</div>
           <div class="quip" id="quip">Va tutto male.</div>
           <div id="newBest" class="newbest hidden">★ NEW BEST ★</div>
+          <div id="unlockNote" class="newbest unlock hidden">🔓 SENSEI SBLOCCATO!</div>
           <div class="stats">
             <div><small>SCORE</small><b id="finalScore">0</b></div>
             <div><small>MONEY</small><b id="finalMoney">€0</b></div>
@@ -124,7 +141,7 @@
     </div>
 
     <div id="rotate" class="rotate" role="status">
-      <div class="rotate-mark">QED <span>RUN</span></div>
+      <div class="rotate-mark">GAME<span>_21</span></div>
       <svg class="rotate-phone" viewBox="0 0 120 120" fill="none" aria-hidden="true"><rect x="38" y="22" width="44" height="76" rx="9"/><path d="M53 30h14M56 89h8M18 60a42 42 0 0 1 69-32m0-13v13H74M102 60a42 42 0 0 1-69 32m0 13V92h13"/></svg>
       <strong>Ruota e corri.</strong>
       <p>Gira lo smartphone in orizzontale<br>per giocare a tutto schermo.</p>
@@ -148,6 +165,7 @@
   <script src="js/world.js"></script>
   <script src="js/bot.js"></script>
   <script src="js/art.js"></script>
+  <script src="js/art_sensei.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/main.js"></script>

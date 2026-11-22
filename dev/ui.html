@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>ui flow</title></head>
 <body><pre id="out">running…</pre>
-<iframe id="f" src="../index.html" width="1000" height="640" style="border:0"></iframe>
+<iframe id="f" width="1000" height="640" style="border:0"></iframe>
 <script>
 // Drives the real page through its DOM: clicks, key events, state checks. Run Edge/Chrome with --allow-file-access-from-files.
 const out = [], log = (ok, m) => out.push((ok ? 'PASS ' : 'FAIL ') + m);
@@ -16,10 +16,26 @@ f.onload = () => {
     win.addEventListener('error', (e) => errs.push(e.message));
     G = Q.game;
     const vis = (id) => !doc.getElementById(id).classList.contains('hidden');
-    log(G.mode === 'menu' && vis('menu') && !vis('pause') && !vis('over'), 'boots into the menu, only the start screen visible');
-    log(doc.querySelector('#menu .title').textContent.includes('QED') && !!doc.getElementById('playBtn'), 'start screen has title + Play button');
-    log(doc.getElementById('menu').textContent.includes('SPACE') && doc.getElementById('controls').textContent.includes('paper'), 'controls shown on start screen and in the bar');
-    adv(2); log(G.mode === 'menu', 'attract-mode demo runs behind the menu without crashing');
+    // ---- title screen (logo) -> character select
+    log(G.mode === 'title' && vis('title') && !vis('menu') && !vis('pause') && !vis('over'), 'boots into the title screen, nothing else visible');
+    const logo = doc.getElementById('logo');
+    log(logo.getAttribute('src') === 'logo.png' && logo.complete && logo.naturalWidth > 0 && !doc.getElementById('title').classList.contains('no-logo'), 'title screen shows logo.png');
+    log(doc.title === 'GAME_21' && !/QED/i.test(doc.documentElement.innerHTML), 'the game is called GAME_21 (page title) and the page has no QED left');
+    adv(1); log(G.mode === 'title', 'the title screen waits for the player');
+    key(win, 'Enter'); log(G.mode === 'menu' && vis('menu') && !vis('title'), 'Enter leaves the title screen for the character select');
+    log(doc.querySelector('#menu .title').textContent.replace(/\s/g, '') === 'GAME_21' && !!doc.getElementById('playBtn'), 'character select has the GAME_21 title + Play button');
+    log(doc.getElementById('menu').textContent.includes('SPACE') && doc.getElementById('controls').textContent.includes('paper'), 'controls shown on the menu and in the bar');
+    log(G.selected === 'tullio' && doc.getElementById('charName').textContent === 'TULLIO' && ['Carlo', 'Maria', 'Capitano'].every((n) => doc.getElementById('charAka').textContent.includes(n)), 'Tullio (aka Carlo, aka Maria, aka Capitano) is the default character');
+    adv(2); log(G.mode === 'menu', 'attract-mode demo + portrait run behind the menu without crashing');
+    // the Sensei is the next character, but locked until a run has been played with Tullio
+    key(win, 'ArrowRight'); key(win, 'ArrowRight', 'keyup'); adv(0.5);
+    log(G.selected === 'sensei' && doc.getElementById('charName').textContent === 'SENSEI' && vis('lockOverlay') && doc.getElementById('lockOverlay').textContent.includes('NON SEI ANCORA DEGNO') && doc.getElementById('playBtn').classList.contains('locked'), 'right arrow scrolls to the Sensei, locked: "non sei ancora degno"');
+    doc.getElementById('playBtn').click(); key(win, 'Enter'); adv(0.2);
+    log(G.mode === 'menu', 'a locked character can not be played (PLAY and Enter do nothing)');
+    doc.getElementById('prevChar').click(); adv(0.2);
+    log(G.selected === 'tullio' && !vis('lockOverlay') && !doc.getElementById('playBtn').classList.contains('locked'), 'left arrow button goes back to Tullio, unlocked');
+    doc.getElementById('prevChar').click(); log(G.selected === 'sensei', 'left from the first character wraps to the last');
+    key(win, 'KeyD'); key(win, 'KeyD', 'keyup'); log(G.selected === 'tullio', 'D / A also scroll through the characters (wraps around)');
 
     doc.getElementById('playBtn').click();
     log(G.mode === 'playing' && !vis('menu') && vis('hud'), 'Play button starts the game and shows the HUD');
@@ -46,6 +62,7 @@ f.onload = () => {
 
     w.startPower('bike'); adv(0.2);
     log(vis('power') && doc.getElementById('powerLabel').textContent === 'VESPA', 'active power-up + label shown in HUD');
+    log(!G.fx.texts.some((t) => t.str === 'Cecilia'), 'the Vespa (Tullio) does not make "Cecilia" appear');
     log(parseFloat(doc.getElementById('powerBar').style.transform.replace(/[^0-9.]/g, '')) > 0.5, 'power-up duration bar is filled');
     w.power.t = 0.01; adv(0.2); log(!vis('power'), 'power-up pill hides when it ends');
 
@@ -58,6 +75,8 @@ f.onload = () => {
     log(G.mode === 'over' && vis('over'), 'game over screen appears after the death animation');
     log(doc.getElementById('finalScore').textContent.length > 0 && doc.getElementById('finalMoney').textContent.startsWith('€') && doc.getElementById('finalDist').textContent.endsWith('m'), 'game over shows score, money, distance');
     const best = doc.getElementById('finalBest').textContent; log(best !== '' && best !== '0' , 'best score recorded (' + best + ')');
+    log(vis('unlockNote') && G.unlocked.sensei === true && localStorage.getItem('game21.unlocked.sensei') === '1', 'finishing a run with Tullio unlocks the Sensei (message on the game-over screen, saved)');
+    log(localStorage.getItem('game21.best.tullio') === best.replace(/,/g, '') && localStorage.getItem('qedrun.best') === null, 'best score saved per character under game21.* keys');
 
     const old = G.world;
     doc.getElementById('restartBtn2').click();
@@ -99,8 +118,60 @@ f.onload = () => {
     try { for (let i = 0; i < 60 * 180; i++) { const wv = G.world; wv.hearts = Math.max(wv.hearts, 2); if (i % 2 === 0) G.tick(1 / 30); } } catch (e) { thrown = e; }
     log(!thrown, 'render+fx soak (3 min of frames, no input) without exceptions' + (thrown ? ' ' + thrown.stack : ''));
     log(errs.length === 0, 'no runtime errors reported' + (errs.length ? ': ' + errs.join('|') : ''));
+
+    // ================= the Sensei, through the real UI
+    G.toMenu(); adv(0.3);
+    doc.getElementById('nextChar').click(); adv(0.3);
+    log(G.selected === 'sensei' && !vis('lockOverlay') && !doc.getElementById('playBtn').classList.contains('locked') && doc.getElementById('playBtn').textContent.includes('PLAY'), 'after a finished run the Sensei is open: no lock, PLAY is back');
+    const tipsTxt = doc.getElementById('tipsList').textContent;
+    log(tipsTxt.includes('Cip e Ciop') && tipsTxt.includes("Tavola d'acqua") && !tipsTxt.includes('Figaro') && !tipsTxt.includes('meteorite'), "the tips on the menu describe the Sensei's run (Cip e Ciop, tavola d'acqua), not Figaro / the meteorite");
+    doc.getElementById('playBtn').click(); w = G.world; adv(0.5);
+    log(G.mode === 'playing' && w.charId === 'sensei' && w.feat.chips && !w.feat.cat && !w.feat.meteor && !w.feat.pool, 'Play starts a run with the Sensei (no Figaro, no meteorite, no pool)');
+    G.fx.reset(); w.startPower('bike'); adv(0.3); log(doc.getElementById('powerLabel').textContent === 'PASSEGGINO', 'HUD: PASSEGGINO replaces the Vespa');
+    log(G.fx.texts.some((t) => t.str === 'Cecilia'), 'taking the passeggino makes the text "Cecilia" appear');
+    let tags = []; const tag0 = G.renderer.tag.bind(G.renderer); G.renderer.tag = (x, y, str, a) => { tags.push(str); return tag0(x, y, str, a); }; adv(0.3); G.renderer.tag = tag0;
+    log(tags.includes('Cecilia'), 'the name "Cecilia" also floats over the little girl while the stroller is under way');
+    w.startPower('sword'); adv(0.3); log(doc.getElementById('powerLabel').textContent === 'BASTONE', 'HUD: BASTONE replaces the sword');
+    w.startPower('shield'); adv(0.3); log(doc.getElementById('powerLabel').textContent === 'FALCE E MARTELLO' && doc.getElementById('banner').textContent === 'FALCE E MARTELLO!', 'HUD: FALCE E MARTELLO replaces the scudetto');
+    w.endPower(true); adv(0.1);
+    // the passeggino: the renderer must draw the stroller (never the Vespa), and the little girl's skin colour must really be on the canvas
+    const Ar = Q.Art, s0 = Ar.stroller, b0 = Ar.bike; let strollerCalls = 0, bikeCalls = 0;
+    Ar.stroller = (...a) => { strollerCalls++; return s0(...a); }; Ar.bike = (...a) => { bikeCalls++; return b0(...a); };
+    const girlPx = () => { const cv = doc.getElementById('game'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 255) < 3 && Math.abs(d[i + 1] - 217) < 3 && Math.abs(d[i + 2] - 189) < 3) n++; return n; };
+    adv(0.2); const before = girlPx();
+    w.player.invuln = 0; w.startPower('bike'); adv(0.5); const withGirl = girlPx();
+    Ar.stroller = s0; Ar.bike = b0;
+    log(strollerCalls > 20 && bikeCalls === 0, 'with the passeggino active the Sensei is drawn pushing the stroller (Art.stroller), never riding the Vespa');
+    log(before < 10 && withGirl > 60, 'the little girl is really on the screen: her skin colour appears only with the passeggino (' + before + ' -> ' + withGirl + ' px)');
+    w.endPower(true); adv(0.1);
+    w.ice.push({ x: 0, w: 4000 }); adv(0.8); log(w.player.skate, "on the ice rink he skates (tavola d'acqua)");
+    G.fx.reset(); w.spawnChips(); adv(1.6);
+    log(G.fx.bubbles.some((b) => b.str === 'AVETE FATTO DI TESTA VOSTRA' && b.key === 'sensei'), 'seeing Cip e Ciop he says "AVETE FATTO DI TESTA VOSTRA" (speech bubble)');
+    // Mr. Hall, the Sensei's villain: banner + name tag on arrival, then his two lines when papers hit him
+    G.fx.reset(); w.enemies.length = 0; w.ammo = 8;
+    const tags2 = []; const tagH = G.renderer.tag.bind(G.renderer); G.renderer.tag = (x, y, str, a) => { tags2.push(str); return tagH(x, y, str, a); };
+    const hall = w.spawnHall(); adv(0.4); G.renderer.tag = tagH;
+    log(doc.getElementById('banner').textContent === 'MR. HALL!' && tags2.includes('MR. HALL'), 'Mr. Hall arrives with a banner and a name tag');
+    hall.state = 'stalk'; hall.next = 999; hall.anchor = 700; hall.x = 700;
+    w.damageEnemy(hall, 1, 'paper'); adv(0.1);
+    log(G.fx.bubbles.some((b) => b.str === 'Modifica painful' && b.key === 'hall' && b.shout), 'first paper: Mr. Hall shouts "Modifica painful"');
+    adv(0.7); w.damageEnemy(hall, 1, 'paper'); adv(0.1);
+    log(hall.dead && G.fx.bubbles.some((b) => b.str === 'as is' && b.key === 'hall'), 'second paper: "as is" and he is annihilated');
+    adv(1.5);
+
+    let thrown2 = null; w.hearts = Q.C.MAX_HEARTS;
+    try { for (let i = 0; i < 60 * 120; i++) { const wv = G.world; wv.hearts = Math.max(wv.hearts, 2); if (i % 2 === 0) G.tick(1 / 30); } } catch (e) { thrown2 = e; }
+    log(!thrown2, 'Sensei: render+fx soak (2 min of frames) without exceptions' + (thrown2 ? ' ' + thrown2.stack : ''));
+    for (let k = 0; k < Q.C.MAX_HEARTS; k++) { G.world.player.invuln = 0; G.world.player.hurtT = 0; G.world.hurt(0); } adv(2.5);
+    log(G.mode === 'over' && !vis('unlockNote') && localStorage.getItem('game21.best.sensei') !== null && /./.test(doc.getElementById('quip').textContent), 'Sensei game over: his own best is saved, no unlock message again');
+    doc.getElementById('restartBtn2').click(); log(G.mode === 'playing' && G.world.charId === 'sensei', 'PLAY AGAIN replays the same character');
+    doc.getElementById('pauseBtn').click(); doc.getElementById('menuBtn1').click();
+    log(G.mode === 'menu' && G.selected === 'sensei', 'back on the menu the Sensei is still highlighted');
+    log(errs.length === 0, 'no runtime errors reported (Sensei included)' + (errs.length ? ': ' + errs.join('|') : ''));
   } catch (e) { out.push('EXCEPTION ' + e.stack); }
   out.push(out.every((l) => l.startsWith('PASS')) ? 'ALL PASS' : 'SOME FAILED');
   document.getElementById('out').textContent = out.join('\n');
 };
+try { localStorage.clear(); } catch (_) {}   // a fresh player: nothing saved, the Sensei locked
+f.src = '../index.html';
 </script></body></html>

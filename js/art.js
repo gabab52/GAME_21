@@ -790,9 +790,10 @@
     ctx.restore();
   }
 
-  /** Round badge holding a power-up icon. kind: bike | skis | sword | shield | pencil */
-  function powerBadge(ctx, kind, t) {
-    const col = { bike: '#f4a261', skis: '#4cc9f0', sword: '#ffd166', shield: '#ffe08a', pencil: '#ff9ec4' }[kind];
+  /** Round badge holding a power-up icon. kind: bike | skis | sword | shield | pencil. `who` = character id (some icons differ per character) */
+  function powerBadge(ctx, kind, t, who) {
+    const alt = who && Art.alt[who] && Art.alt[who].badge && Art.alt[who].badge[kind];
+    const col = alt ? alt.color : { bike: '#f4a261', skis: '#4cc9f0', sword: '#ffd166', shield: '#ffe08a', pencil: '#ff9ec4' }[kind];
     ctx.save();
     if (kind === 'sword') { // rare: pulsing golden halo + sparkles
       const g = 0.25 + Math.sin(t * 6) * 0.1;
@@ -802,7 +803,9 @@
     ctx.beginPath(); ctx.arc(0, 0, 21, 0, 7); fs(ctx, '#fff', 2.4);
     ctx.beginPath(); ctx.arc(0, 0, 17, 0, 7); ctx.fillStyle = col; ctx.fill();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (kind === 'bike') {
+    if (alt) {
+      alt.draw(ctx, t);
+    } else if (kind === 'bike') {
       ctx.save(); ctx.scale(0.3, 0.3); ctx.translate(-2, 26); bikeIcon(ctx); ctx.restore();
     } else if (kind === 'skis') {
       ctx.strokeStyle = OUT; ctx.lineWidth = 5; [[-1, 1], [1, 1]].forEach(([d]) => { ctx.beginPath(); ctx.moveTo(-9 * d, 10); ctx.lineTo(9 * d, -10); ctx.stroke(); });
@@ -824,6 +827,6 @@
     ctx.beginPath(); ctx.moveTo(-42, -13); ctx.quadraticCurveTo(-46, -36, -26, -40); ctx.lineTo(-8, -38); ctx.quadraticCurveTo(-1, -30, -3, -17); ctx.lineTo(8, -12); ctx.lineTo(13, -48); ctx.lineTo(25, -52); ctx.lineTo(30, -22); ctx.lineTo(36, -13); ctx.lineTo(-6, -12); ctx.closePath(); ctx.stroke(); ctx.fill();
   }
 
-  const Art = { head: drawHead, hero, heroSwim, bike, sword, pencil, meteor, meteorTrail, oldman, cat, buoy, scudetto, cone, books, platform, coin, note, paper, bombItem, heart, powerBadge, star, bikeIcon, rr, ell, fs, OUT };
+  const Art = { head: drawHead, hero, heroSwim, bike, sword, pencil, meteor, meteorTrail, oldman, cat, buoy, scudetto, cone, books, platform, coin, note, paper, bombItem, heart, powerBadge, star, bikeIcon, rr, ell, fs, limb, ik, OUT, alt: {} };
   Q.Art = Art;
 })();

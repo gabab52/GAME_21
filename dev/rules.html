@@ -2,7 +2,7 @@
 <html><head><meta charset="utf-8"><title>rules</title></head>
 <body><pre id="out">running…</pre>
 <script src="../js/config.js"></script><script src="../js/util.js"></script>
-<script src="../js/spawner.js"></script><script src="../js/world.js"></script>
+<script src="../js/spawner.js"></script><script src="../js/world.js"></script><script src="../js/bot.js"></script>
 <script>
 const C = Q.C, GY = C.GROUND, H = C.MAX_HEARTS;   // H = hearts at the start of a run
 const NO = { left:false,right:false,down:false,jumpHeld:false,jumpPressed:false,throwPressed:false,bombPressed:false };
@@ -279,5 +279,183 @@ test('water passage is 5-8 seconds long at current speed and carries coins + buo
 test('first 8 seconds contain no enemies', () => {
   const w = new Q.World(); let bad = 0; for (let i = 0; i < 60 * 8; i++) { w.update(1/60, NO); w.hearts = 99; if (w.enemies.length) bad++; } return bad === 0 || 'enemies early=' + bad;
 });
+
+// =====================================================================  SENSEI (second character)
+const freshS = () => { const w = new Q.World('sensei'); w.spawner.update = () => {}; return w; };
+const evs = (w, store) => () => { w.events.forEach((e) => store.push(e.type + (e.src ? ':' + e.src : '') + (e.skate !== undefined ? ':skate=' + e.skate : ''))); w.events.length = 0; return NO; };
+
+test('CHARACTERS: Tullio is the default and open; the Sensei is second and locked until a run is finished', () => {
+  return (Q.CHAR_ORDER.join() === 'tullio,sensei' && !Q.CHARS.tullio.locked && Q.CHARS.sensei.locked && new Q.World().charId === 'tullio' && new Q.World('nope').charId === 'tullio' && new Q.World('sensei').charId === 'sensei') || 'order/default';
+});
+test('CHARACTERS: Tullio\'s names (aka Carlo, Maria, Capitano), the Sensei is aka Valerix, and the Sensei\'s feature switches', () => {
+  const t = Q.CHARS.tullio, s = Q.CHARS.sensei;
+  return (['Carlo', 'Maria', 'Capitano'].every((n) => t.aka.includes(n)) && s.aka.includes('Valerix') && t.feat.cat && t.feat.meteor && t.feat.pool && !t.feat.ice && !t.feat.chips
+    && !s.feat.cat && !s.feat.meteor && !s.feat.pool && s.feat.ice && s.feat.chips) || JSON.stringify([t.feat, s.feat]);
+});
+test('NO "Q.E.D." in the game-over quips any more (GAME_21 instead); "Va tutto male." is still one of Tullio\'s quips', () => {
+  const all = Q.CHAR_ORDER.flatMap((id) => Q.CHARS[id].quips);
+  return (all.every((q) => !/Q\.?E\.?D/i.test(q)) && all.some((q) => q.startsWith('GAME_21')) && Q.CHARS.tullio.quips.includes('Va tutto male.')) || all.join('|');
+});
+test('SENSEI POWERS: passeggino / bastone / falce e martello replace Vespa / sword / scudetto (labels), the rest is unchanged', () => {
+  const I = (c, k) => Q.powerInfo(c, k).label;
+  return (I('sensei', 'bike') === 'PASSEGGINO' && I('sensei', 'sword') === 'BASTONE' && I('sensei', 'shield') === 'FALCE E MARTELLO' && I('sensei', 'skis') === 'SKIS' && I('sensei', 'pencil') === 'MATITA'
+    && I('tullio', 'bike') === 'VESPA' && I('tullio', 'sword') === 'SWORD' && I('tullio', 'shield') === 'SCUDETTO') || ['bike', 'sword', 'shield'].map((k) => I('sensei', k) + '/' + I('tullio', k)).join();
+});
+test('SENSEI: BASTONE hits and destroys every obstacle in front of him, and kills Francone, with no damage', () => {
+  const w = freshS(); w.startPower('sword');
+  ['cone', 'books', 'wing'].forEach((k, i) => w.obstacles.push({ kind: k, x: w.player.x + 30 + i * 25, y: GY, w: 30, h: 36 }));
+  const e = w.spawnOldMan(); e.x = w.player.x + 60; e.state = 'lunge'; e.lungeSpeed = 10; run(w, 0.4);
+  return (w.obstacles.length === 0 && e.dead && w.hearts === H) || `obs=${w.obstacles.length} dead=${e.dead} hearts=${w.hearts}`;
+});
+test('SENSEI: PASSEGGINO = speed boost, immune, smashes obstacles, longer hitbox than the Vespa', () => {
+  const w = freshS(); w.startPower('bike'); run(w, 2); const fast = w.speedMul > 1.55; w.obstacles.push({ kind: 'cone', x: w.player.x, y: GY, w: 26, h: 32 });
+  const o = w.spawnOldMan(); o.x = w.player.x + 20; o.state = 'lunge'; o.lungeSpeed = 10; run(w, 0.3);
+  return (fast && w.hearts === H && w.obstacles.length === 0 && w.player.w === 100 && fresh().player.w === 30) || `speed=${w.speedMul.toFixed(2)} hearts=${w.hearts} w=${w.player.w}`;
+});
+test('SENSEI: FALCE E MARTELLO = nothing can hurt him for 10s, obstacles shatter (shield_block event)', () => {
+  const w = freshS(); w.startPower('shield'); w.obstacles.push({ kind: 'cone', x: w.player.x - 13, y: GY, w: 26, h: 32 });
+  const c = w.spawnChip('cip'); c.x = w.player.x + 5; const ev = []; run(w, 0.5, evs(w, ev)); w.hurt(0);
+  return (w.hearts === H && w.obstacles.length === 0 && ev.includes('shield_block') && w.power.dur === 10) || `hearts=${w.hearts} ev=${[...new Set(ev)]}`;
+});
+test('SENSEI: Figaro and the meteorite never show up in his runs; Cip e Ciop, the ice rink, Francone and Mr. Hall do', () => {
+  const w = new Q.World('sensei'); const kinds = new Set(); let meteors = 0, water = 0, ice = 0, cat = 0; w.hearts = 99;
+  for (let i = 0; i < 60 * 300; i++) {
+    w.update(1/60, Q.Bot.decide(w)); w.hearts = 99; w.player.invuln = 5;
+    w.events.forEach((e) => { if (e.type === 'meteor_warn') meteors++; }); w.events.length = 0;
+    w.enemies.forEach((e) => { kinds.add(e.kind); if (e.kind === 'cat') cat++; }); if (w.water.length) water++; if (w.ice.length) ice++;
+  }
+  return (meteors === 0 && cat === 0 && water === 0 && ice > 60 * 6 && kinds.has('chip') && kinds.has('oldman') && kinds.has('hall') && kinds.size === 3) || `meteors=${meteors} cat=${cat} water=${water} iceFrames=${ice} kinds=${[...kinds]}`;
+});
+test('TULLIO: still no chipmunks and no ice rink in his runs (his pool, Figaro and the meteorite stay)', () => {
+  const w = new Q.World(); let ice = 0, chip = 0, water = 0; w.hearts = 99;
+  for (let i = 0; i < 60 * 240; i++) { w.update(1/60, Q.Bot.decide(w)); w.hearts = 99; w.player.invuln = 5; w.events.length = 0; if (w.ice.length) ice++; if (w.water.length) water++; if (w.enemies.some((e) => e.kind === 'chip')) chip++; }
+  return (ice === 0 && chip === 0 && water > 0) || `ice=${ice} chip=${chip} water=${water}`;
+});
+test('SENSEI: the first power-up of a run is the passeggino (his signature), the others come from the usual pool (pencil included)', () => {
+  const seen = new Set(); const firsts = [];
+  for (let i = 0; i < 40; i++) { const w = freshS(); w.t = 30; const sp = w.spawner; const pat = sp.patterns.find((p) => p.name === 'powerUp'); pat.run(1000, w, sp); firsts.push(w.items[0].kind); for (let j = 0; j < 20; j++) { w.items.length = 0; pat.run(1000, w, sp); w.items.forEach((it) => seen.add(it.kind)); } }
+  return (firsts.every((k) => k === 'bike') && ['bike', 'skis', 'sword', 'shield', 'pencil'].every((k) => seen.has(k))) || `firsts=${[...new Set(firsts)]} seen=${[...seen]}`;
+});
+test('SENSEI PASSEGGINO (real run): the first power-up on the road is the stroller and it shows up early (before 35 s) in every run', () => {
+  const firsts = [], times = [];
+  for (let r = 0; r < 10; r++) {
+    const w = new Q.World('sensei'); w.hearts = 99; let done = false;
+    for (let i = 0; i < 60 * 60 && !done; i++) { w.update(1/60, Q.Bot.decide(w)); w.hearts = 99; w.player.invuln = 5; w.events.length = 0; const it = w.items.find((x) => !['paper', 'bomb', 'heart'].includes(x.kind)); if (it) { firsts.push(it.kind); times.push(w.t); done = true; } }
+  }
+  return (firsts.length === 10 && firsts.every((k) => k === 'bike') && Math.max(...times) < 35) || `firsts=${firsts} latest=${Math.max(...times).toFixed(0)}s`;
+});
+test('SENSEI PASSEGGINO: picking the item up on the road starts the power (power_pick / power_start with kind bike, label PASSEGGINO)', () => {
+  const w = freshS(); w.items.push({ kind: 'bike', x: w.player.x, y: GY - 30, r: 20, ph: 0 }); const ev = [];
+  run(w, 0.2, () => { w.events.forEach((e) => ev.push(e.type + (e.kind ? ':' + e.kind : ''))); w.events.length = 0; return NO; });
+  return (w.power.type === 'bike' && ev.includes('power_pick:bike') && ev.includes('power_start:bike') && Q.powerInfo(w.charId, 'bike').label === 'PASSEGGINO' && w.power.dur === 9) || `power=${w.power.type} ev=${ev}`;
+});
+test('ICE: "tavola d\'acqua" makes him skate: costume event, glides with almost no friction, slow to accelerate', () => {
+  const w = freshS(); w.ice.push({ x: 0, w: 6000 }); const ev = []; run(w, 0.3, evs(w, ev)); const skating = w.player.skate;
+  w.player.vx = 200; run(w, 0.5); const glide = w.player.vx;                     // on tarmac this would be 0 after 0.06s
+  const v = freshS(); v.ice.push({ x: 0, w: 6000 }); run(v, 0.3); run(v, 0.2, () => P({ right: true })); const slow = v.player.vx;   // tarmac: 300 after 0.09s
+  const n = freshS(); n.player.vx = 200; run(n, 0.5);
+  return (skating && ev.includes('costume:skate=true') && glide > 150 && slow < 180 && n.player.vx === 0) || `skate=${skating} ev=${[...new Set(ev)]} glide=${glide.toFixed(0)} slow=${slow.toFixed(0)} tarmac=${n.player.vx}`;
+});
+test('ICE: skates come off at the end of the rink (costume event again), grip is back, and he can still jump on the ice', () => {
+  const w = freshS(); w.ice.push({ x: 100, w: 600 }); run(w, 0.3); const on = w.player.skate;
+  run(w, 1.4, (i) => P({ jumpPressed: i === 0, jumpHeld: i < 20 })); const jumped = w.player.onGround; // landed again, still skating
+  const apex = freshS(); apex.ice.push({ x: 0, w: 6000 }); run(apex, 0.3); let min = GY; run(apex, 1.2, (i) => { min = Math.min(min, apex.player.y); return P({ jumpPressed: i === 0, jumpHeld: true }); });
+  w.ice[0].x = -3000; const ev = []; run(w, 0.3, evs(w, ev)); w.player.vx = 200; run(w, 0.3);
+  return (on && jumped && GY - min > 120 && !w.player.skate && ev.includes('costume:skate=false') && w.player.vx === 0) || `on=${on} apex=${(GY - min).toFixed(0)} off=${!w.player.skate} ev=${[...new Set(ev)]} vx=${w.player.vx}`;
+});
+test('ICE rink pattern: 6-8 s long, ONLY airfoil profiles (no cones) + coins, leaves enemies waiting', () => {
+  const w = freshS(); w.t = 40; w.scroll = 400; const sp = w.spawner; const pat = sp.patterns.find((p) => p.name === 'rink');
+  pat.run(1000, w, sp); const z = w.ice[0]; const secs = z.w / 400;
+  return (secs >= 5.9 && secs <= 8.1 && w.obstacles.length >= 1 && w.obstacles.every((o) => o.kind === 'wing') && w.coins.length > 8 && sp.cool.enemy > secs && sp.cool.zone > 30) || `secs=${secs} wings=${w.obstacles.filter((o) => o.kind === 'wing').length} coins=${w.coins.length}`;
+});
+test('ICE rink (real run): appears several times, never with an enemy or a non-airfoil obstacle in it, always ends', () => {
+  const w = new Q.World('sensei'); let zones = 0, last = 0, bad = '', skating = 0; w.hearts = 99;
+  for (let i = 0; i < 60 * 240; i++) {
+    w.update(1/60, Q.Bot.decide(w)); w.hearts = 99; w.player.invuln = 5; w.events.length = 0;
+    if (w.ice.length > last) zones++; last = w.ice.length;
+    for (const z of w.ice) for (const e of w.enemies) if (!e.dead && e.x > z.x - 60 && e.x < z.x + z.w + 60) bad = 'enemy on the ice at t=' + w.t.toFixed(0);
+    if (w.player.skate) skating++;
+    for (const z of w.ice) for (const o of w.obstacles) if (o.x + o.w > z.x && o.x < z.x + z.w && o.kind !== 'wing') bad = 'a ' + o.kind + ' on the rink at t=' + w.t.toFixed(0);
+  }
+  return (zones >= 3 && !bad && skating > 60 * 10 && w.ice.length <= 1) || `zones=${zones} skateFrames=${skating} bad=${bad}`;
+});
+test('CIP E CIOP: spawn as a pair (cip, ciop), small, one hit each, 150 points each', () => {
+  const w = freshS(); const [a, b] = w.spawnChips();
+  return (a.kind === 'chip' && b.kind === 'chip' && a.who === 'cip' && b.who === 'ciop' && a.hp === 1 && b.hp === 1 && a.h < 30 && b.x > a.x && C.SCORE.chip === 150) || `${a.who}/${b.who} hp=${a.hp}/${b.hp}`;
+});
+test('CIP E CIOP: a paper kills each of them (kill event with who), a stomp too; standing still gets him hurt', () => {
+  const w = freshS(); w.ammo = 4; const a = w.spawnChip('cip'); a.x = 600; a.run = 0; const ev = [];
+  run(w, 1.2, (i) => { w.events.forEach((e) => { if (e.type === 'kill') ev.push(e.kind + ':' + e.who); }); w.events.length = 0; return P({ throwPressed: i % 12 === 0 }); });
+  const s = freshS(); const c = s.spawnChip('ciop'); c.x = s.player.x; c.y = GY; c.state = 'run'; s.player.y = GY - 34; s.player.vy = 300; s.player.onGround = false; s.player.prevY = GY - 38; run(s, 0.05);
+  const h = freshS(); const d = h.spawnChip('cip'); d.x = h.player.x; run(h, 0.1);
+  return (a.dead && ev[0] === 'chip:cip' && c.dead && s.hearts === H && h.hearts === H - 1) || `ev=${ev} stomp=${c.dead} hearts=${s.hearts}/${h.hearts}`;
+});
+test('CIP E CIOP: the Sensei says "AVETE FATTO DI TESTA VOSTRA" when he sees them - once per pair', () => {
+  const w = freshS(); const said = []; w.spawnChips();
+  run(w, 3, () => { w.events.forEach((e) => { if (e.type === 'speech') said.push(e.who + ':' + e.text); }); w.events.length = 0; return NO; });
+  return (said.length === 1 && said[0] === 'sensei:AVETE FATTO DI TESTA VOSTRA') || `said=${said.join('|')}`;
+});
+test('CIP E CIOP: they sprint in, crouch and pounce like Figaro; the bomb, the pencil and the bastone beat them', () => {
+  const w = freshS(); const a = w.spawnChip('cip'); const states = new Set(); run(w, 2.5, () => { states.add(a.state); return NO; });
+  const b = freshS(); b.spawnChips(); b.enemies.forEach((e) => (e.x = 600)); b.bombs = 1; run(b, 0.6, (i) => P({ bombPressed: i === 0 }));
+  const p = freshS(); p.startPower('pencil'); const c = p.spawnChip('ciop'); c.x = p.player.x + 70; c.run = 100; const ev = []; run(p, 0.5, evs(p, ev));
+  const s = freshS(); s.startPower('sword'); const d = s.spawnChip('cip'); d.x = s.player.x + 60; d.run = 100; run(s, 0.4);
+  return (states.has('run') && states.has('crouch') && states.has('leap') && b.enemies.every((e) => e.dead) && c.dead && p.hearts === H && ev.includes('kill:pencil') && d.dead && s.hearts === H)
+    || `states=${[...states]} bomb=${b.enemies.map((e) => e.dead)} pencil=${c.dead} ev=${ev} staff=${d.dead}`;
+});
+// ---- Mr. Hall: the Sensei's villain, a younger Francone
+const sayHall = (w, secs, inp) => { const said = []; run(w, secs, (i) => { w.events.forEach((ev) => { if (ev.type === 'speech') said.push(ev.who + ':' + ev.text); }); w.events.length = 0; return inp ? inp(i) : NO; }); return said; };
+test('MR. HALL: tall and lanky like Francone, but a little quicker (shorter wind-up, faster lunge), two lives, 300 points', () => {
+  const w = freshS(); const h = w.spawnHall(), f = w.spawnOldMan();
+  return (h.kind === 'hall' && h.h >= 85 && h.h > w.player.h * 1.3 && h.hp === 2 && h.maxHp === 2 && h.windup < f.windup && h.lungeSpeed > f.lungeSpeed && C.SCORE.hall === 300) || `h=${h.h} hp=${h.hp} windup=${h.windup}/${f.windup} lunge=${h.lungeSpeed}/${f.lungeSpeed}`;
+});
+test('MR. HALL: papers destroy him - first hit "Modifica painful", second (killing) hit "as is"', () => {
+  const w = freshS(); w.ammo = 8; const e = w.spawnHall(); e.x = 700; e.state = 'stalk'; e.anchor = 700; e.next = 999;
+  const said = sayHall(w, 3, (i) => P({ throwPressed: i % 15 === 0 }));
+  return (e.dead && w.kills === 1 && w.bonus >= 300 && said.join('|') === 'hall:Modifica painful|hall:as is') || `dead=${e.dead} said=${said.join('|')} ammo=${w.ammo}`;
+});
+test('MR. HALL: does not say Francone\'s "SIGNORI", says nothing on his way in, and Francone\'s own lines are unchanged', () => {
+  const w = freshS(); w.spawnHall(); const said = sayHall(w, 2.5);
+  const v = fresh(); v.ammo = 8; const o = v.spawnOldMan(); o.x = 700; o.state = 'stalk'; o.anchor = 700; o.next = 999; const sv = sayHall(v, 3, (i) => P({ throwPressed: i % 15 === 0 }));
+  return (said.length === 0 && sv.join('|') === 'oldman:CAZZO RIDI|oldman:LE DERIVATE') || `hall=${said} francone=${sv}`;
+});
+test('MR. HALL: stalks, winds up and lunges like Francone - a lunge hurts a player who stands still, but can be jumped', () => {
+  const w = freshS(); const e = w.spawnHall(); e.x = 640; e.state = 'windup'; e.st = 0.5; e.anchor = 640; const states = new Set();
+  run(w, 2.5, (i) => { states.add(e.state); return P({ jumpPressed: i === 38, jumpHeld: i < 90 }); }); const jumped = w.hearts;
+  const v = freshS(); const e2 = v.spawnHall(); e2.x = 640; e2.state = 'windup'; e2.st = 0.5; e2.anchor = 640; run(v, 2.5);
+  return (states.has('lunge') && jumped === H && v.hearts === H - 1) || `states=${[...states]} jumped=${jumped} stood=${v.hearts}`;
+});
+test('MR. HALL: too big to stomp (like Francone); the bastone and the bomb kill him, the passeggino bumps him', () => {
+  const a = freshS(); const e = a.spawnHall(); e.x = a.player.x; e.state = 'stalk'; e.anchor = a.player.x; e.next = 999; a.player.y = GY - 70; a.player.vy = 300; a.player.onGround = false; a.player.prevY = GY - 100; run(a, 0.05);
+  const b = freshS(); b.startPower('sword'); const f = b.spawnHall(); f.x = b.player.x + 60; f.state = 'lunge'; f.lungeSpeed = 10; run(b, 0.4);
+  const c = freshS(); c.spawnHall(); c.enemies.forEach((x) => (x.x = 600)); c.bombs = 1; run(c, 0.6, (i) => P({ bombPressed: i === 0 }));
+  const d = freshS(); d.startPower('bike'); const g = d.spawnHall(); g.x = d.player.x + 20; g.state = 'lunge'; g.lungeSpeed = 10; run(d, 0.3);
+  return (!e.dead && f.dead && b.hearts === H && c.enemies.every((x) => x.dead) && g.hp < 2 && d.hearts === H) || `stomp-dead=${e.dead} sword=${f.dead} bomb=${c.enemies.map((x) => x.dead)} stroller hp=${g.hp}`;
+});
+test('MR. HALL (real run): he shows up in the Sensei\'s runs (not in Tullio\'s), alone - never together with Francone - and papers are dropped for the fight', () => {
+  let halls = 0, tog = false, papers = 0;
+  for (let r = 0; r < 4; r++) {
+    const w = new Q.World('sensei'); let prev = false; w.hearts = 99;
+    for (let i = 0; i < 60 * 240; i++) {
+      w.update(1/60, Q.Bot.decide(w)); w.hearts = 99; w.player.invuln = 5; w.events.length = 0;
+      const h = w.enemies.some((e) => e.kind === 'hall' && !e.dead), o = w.enemies.some((e) => e.kind === 'oldman' && !e.dead);
+      if (h && !prev) halls++; prev = h; if (h && o) tog = true;
+    }
+  }
+  const t = new Q.World(); let tHall = 0; t.hearts = 99;
+  for (let i = 0; i < 60 * 240; i++) { t.update(1/60, Q.Bot.decide(t)); t.hearts = 99; t.player.invuln = 5; t.events.length = 0; if (t.enemies.some((e) => e.kind === 'hall')) tHall++; }
+  return (halls >= 4 && !tog && tHall === 0) || `halls=${halls} together=${tog} inTullio=${tHall}`;
+});
+test('SENSEI: airfoil profiles hurt like any obstacle (hit box = the thick front part, 76x28); the pencil pierces them too', () => {
+  const w = freshS(); w.obstacles.push({ kind: 'wing', x: w.player.x - 38, y: GY, w: 76, h: 28 }); run(w, 0.2);
+  const v = freshS(); v.startPower('pencil'); v.obstacles.push({ kind: 'wing', x: v.player.x + 30, y: GY, w: 76, h: 28 }); run(v, 0.3);
+  return (w.hearts === H - 1 && v.hearts === H && v.obstacles.length === 0) || `plain=${w.hearts} pencil=${v.hearts}/${v.obstacles.length}`;
+});
+test('SENSEI: the bot (autoplayer) survives the rink without NaN or runaway sliding', () => {
+  const w = freshS(); w.ice.push({ x: 0, w: 4000 }); let maxX = 0, minX = 999, bad = false;
+  for (let i = 0; i < 60 * 8; i++) { w.update(1/60, Q.Bot.decide(w)); w.events.length = 0; const x = w.player.x; if (!isFinite(x)) bad = true; if (i > 60 * 3) { maxX = Math.max(maxX, x); minX = Math.min(minX, x); } }
+  return (!bad && maxX < 330 && minX > 60) || `x range after 3s: ${minX.toFixed(0)}..${maxX.toFixed(0)}`;
+});
+
 document.getElementById('out').textContent = res.join('\n') + '\n\n' + (res.every((r) => r.startsWith('PASS')) ? 'ALL PASS' : 'SOME FAILED');
 </script></body></html>

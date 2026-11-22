@@ -11,7 +11,7 @@ const evCount = {};
 const errs = [];
 window.addEventListener('error', e => errs.push(e.message));
 function sim(maxT, opts = {}) {
-  const w = new Q.World();
+  const w = new Q.World(opts.char);
   const noInp = { left:false,right:false,down:false,jumpHeld:false,jumpPressed:false,throwPressed:false,bombPressed:false };
   let t = 0;
   const seen = {};
@@ -39,6 +39,17 @@ try {
   out.push('BOT RUNS (max 300s each):');
   results.forEach((r,i)=>out.push(' #'+i+' '+JSON.stringify(r)));
   out.push('EVENT TOTALS: '+JSON.stringify(evCount));
+  // the Sensei (second character): same invariants, plus his own mix of encounters
+  const sres = [], sEv = {};
+  for (let i = 0; i < 6; i++) {
+    const { w, t, seen } = sim(300, { char: 'sensei' });
+    for (const k in seen) sEv[k] = (sEv[k] || 0) + seen[k];
+    sres.push({ survived: t.toFixed(1), score: w.score, m: Math.floor(w.meters), money: w.money, kills: w.kills, hearts: w.hearts, over: w.over, speed: Math.round(w.scroll) });
+  }
+  out.push('SENSEI BOT RUNS (max 300s each):');
+  sres.forEach((r,i)=>out.push(' #'+i+' '+JSON.stringify(r)));
+  out.push('SENSEI EVENT TOTALS: '+JSON.stringify(sEv));
+  out.push('SENSEI sanity: ' + ((sEv.meow || sEv.meteor_warn || sEv.splash) ? 'FAIL (Tullio-only events: meow/meteor/splash)' : 'ok (no Figaro, meteorite or pool)') + ' / ' + ((sEv.squeak && sEv.costume) ? 'ok (chipmunks + skates seen)' : 'FAIL (no chipmunks or skates)'));
   // idle player: should take damage and die, game over must fire
   const idle = sim(120, { idle: true });
   out.push('IDLE: over='+idle.w.over+' t='+idle.t.toFixed(1)+' hearts='+idle.w.hearts);
@@ -48,6 +59,10 @@ try {
   for (let i = 0; i < 60*100 && !w2.over; i++) { w2.hearts = C.MAX_HEARTS; w2.update(1/60, Q.Bot.decide(w2)); for (const e of w2.enemies) kinds[e.kind] = 1; w2.events.length = 0;
     for (const it of w2.items) kinds['item:'+it.kind] = 1; for (const o of w2.obstacles) kinds['obst:'+o.kind]=1; if (w2.platforms.length) kinds.platform = 1; if (w2.power.type) kinds['power:'+w2.power.type] = 1; }
   out.push('SEEN IN 100s: '+Object.keys(kinds).sort().join(', '));
+  const w3 = new Q.World('sensei'); const kinds3 = {};
+  for (let i = 0; i < 60*100 && !w3.over; i++) { w3.hearts = C.MAX_HEARTS; w3.update(1/60, Q.Bot.decide(w3)); for (const e of w3.enemies) kinds3[e.kind] = 1; w3.events.length = 0;
+    for (const it of w3.items) kinds3['item:'+it.kind] = 1; for (const o of w3.obstacles) kinds3['obst:'+o.kind]=1; if (w3.ice.length) kinds3.ice = 1; if (w3.power.type) kinds3['power:'+w3.power.type] = 1; }
+  out.push('SENSEI SEEN IN 100s: '+Object.keys(kinds3).sort().join(', '));
   out.push('ERRORS: '+(errs.length?errs.join(' | '):'none'));
 } catch (e) { out.push('EXCEPTION: '+e.stack); }
 document.getElementById('out').textContent = out.join('\n');

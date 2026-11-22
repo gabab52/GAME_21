@@ -13,9 +13,19 @@
 
   // Francone's two catchphrases, one per life: "CAZZO RIDI" on the first hit, "LE DERIVATE" on the second (the killing one)
   const OLDMAN_LINES = ['CAZZO RIDI', 'LE DERIVATE'];
+  // Mr. Hall (the Sensei's villain, a younger Francone): one line per life, the second one is the killing blow
+  const HALL_LINES = ['Modifica painful', 'as is'];
+  // Francone and Mr. Hall share the same rules (stalk, wind up, lunge, two lives, papers beat them, too big to stomp)
+  const isBoss = (e) => e.kind === 'oldman' || e.kind === 'hall';
 
   class World {
-    constructor() { this.reset(); }
+    /** charId: which character is playing ('tullio' by default). It decides the encounters and the terrain of the run. */
+    constructor(charId) {
+      this.charId = Q.CHARS[charId] ? charId : 'tullio';
+      this.char = Q.CHARS[this.charId];
+      this.feat = this.char.feat;
+      this.reset();
+    }
 
     reset() {
       this.t = 0;
@@ -37,6 +47,8 @@
       this.obstacles = [];
       this.platforms = [];
       this.water = [];     // water passages {x, w}: inside them the hero swims instead of running
+      this.ice = [];       // "tavola d'acqua" passages {x, w} (Sensei): the road becomes an ice rink, the hero skates and slides
+      this.chipSayCd = 0;  // so the Sensei comments on Cip e Ciop once per encounter, not once per chipmunk
       this.enemies = [];
       this.meteors = [];   // RSE meteorites falling from the sky (screen space, they don't scroll)
       this.shots = [];
@@ -51,7 +63,7 @@
         prevY: C.GROUND, onGround: true, plat: null, jumps: 0, coyote: 0, jumpBuf: 0, canCut: false,
         dropT: 0, invuln: 0, hurtT: 0, throwT: 0, collectT: 0, bombT: 0, swingT: 0,
         dead: false, deadT: 0, animT: 0, gameOverSent: false,
-        swim: false, strokeCd: 0, changeT: 0,
+        swim: false, strokeCd: 0, changeT: 0, skate: false,
       };
       this.spawner = new Q.Spawner(this);
     }
@@ -84,15 +96,17 @@
         if (this.power.t <= 0) this.endPower();
       }
       // hitbox: wide for the Vespa, low and long when swimming
-      p.w = this.power.type === 'bike' ? 62 : p.swim ? 44 : 30;
+      p.w = this.power.type === 'bike' ? (this.charId === 'sensei' ? 100 : 62) : p.swim ? 44 : 30; // the Sensei's passeggino + pusher is longer than a Vespa
       p.h = p.swim ? 26 : 62;
       this.shieldCd -= dt;
+      this.chipSayCd -= dt;
 
       // scrolling entities
-      for (const arr of [this.coins, this.items, this.obstacles, this.platforms, this.water]) {
+      for (const arr of [this.coins, this.items, this.obstacles, this.platforms, this.water, this.ice]) {
         for (const e of arr) e.x -= ds;
       }
       this.water = this.water.filter((z) => z.x + z.w > -80);
+      this.ice = this.ice.filter((z) => z.x + z.w > -80);
       this.coins = this.coins.filter((e) => e.x > -60);
       this.items = this.items.filter((e) => e.x > -60);
       this.obstacles = this.obstacles.filter((e) => e.x + e.w > -60 && !e.gone);
@@ -146,15 +160,20 @@
       const inZone = this.inWater(p.x);
       if (inZone && !p.swim && p.onGround && p.y >= C.GROUND - 1) this.setSwim(true);
       else if (!inZone && p.swim) this.setSwim(false);
+      // run <-> skate: same idea on the ice rink (skates go on when he touches down on it, off when it ends)
+      const onRink = this.inIce(p.x);
+      if (onRink && !p.skate && p.onGround && p.y >= C.GROUND - 1) this.setSkate(true);
+      else if (!onRink && p.skate) this.setSkate(false);
 
       const skis = this.power.type === 'skis';
+      const sliding = p.skate && p.onGround; // on the ice there is almost no grip: you keep gliding
       const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
       const max = C.MOVE * (skis ? 1.12 : 1);
       if (p.hurtT > 0) {
         p.vx *= Math.max(0, 1 - 5 * dt);
       } else {
-        const accel = skis ? 750 : 3400;
-        const fric = skis ? 380 : 3400;
+        const accel = sliding ? C.ICE_ACCEL : skis ? 750 : 3400;
+        const fric = sliding ? C.ICE_FRICTION : skis ? 380 : 3400;
         if (dir) p.vx += dir * accel * dt;
         else if (p.vx > 0) p.vx = Math.max(0, p.vx - fric * dt);
         else if (p.vx < 0) p.vx = Math.min(0, p.vx + fric * dt);
@@ -241,15 +260,39 @@
       this.emit('costume', { swim: on, x: p.x, y: p.y - 30 });
     }
 
+    // ---------------------------------------------------------------- ice rink ("tavola d'acqua")
+    inIce(x) {
+      for (const z of this.ice) if (x > z.x && x < z.x + z.w) return true;
+      return false;
+    }
+    setSkate(on) {
+      const p = this.player;
+      p.skate = on; p.changeT = 0.4;
+      this.emit('costume', { skate: on, swim: false, x: p.x, y: p.y - 30 });
+    }
+
     // ---------------------------------------------------------------- enemies
     spawnOldMan() {
       const e = {
-        kind: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 36, h: 96, hp: 2, maxHp: 2,   // tall and lanky, but only two lives: one line per hit
+        kind: 'oldman', who: 'oldman', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 36, h: 96, hp: 2, maxHp: 2,   // tall and lanky, but only two lives: one line per hit
         state: 'enter', st: 0, life: 0, anchor: C.W - 150, flash: 0, iframes: 0, dead: false, deadT: 0,
         rot: 0, spin: 0, next: U.rand(1.2, 2.0), lungeSpeed: 480 + this.diff * 160, quote: null, quoteT: 0, hits: 0,
+        lines: OLDMAN_LINES, greet: 'SIGNORI', windup: 0.72,
       };
       this.enemies.push(e);
       this.emit('enemy_spawn', { kind: 'oldman', x: C.W - 60, y: C.GROUND - 40 });
+      return e;
+    }
+    /** Mr. Hall: like Francone but younger, so a little quicker (shorter wind-up, faster lunge). Papers beat him: two hits. */
+    spawnHall() {
+      const e = {
+        kind: 'hall', who: 'hall', x: C.W + 90, y: C.GROUND, vx: 0, vy: 0, w: 34, h: 90, hp: 2, maxHp: 2,
+        state: 'enter', st: 0, life: 0, anchor: C.W - 140, flash: 0, iframes: 0, dead: false, deadT: 0, nameT: 3.4,
+        rot: 0, spin: 0, next: U.rand(1.0, 1.7), lungeSpeed: 530 + this.diff * 170, quote: null, quoteT: 0, hits: 0,
+        lines: HALL_LINES, greet: null, windup: 0.6,
+      };
+      this.enemies.push(e);
+      this.emit('enemy_spawn', { kind: 'hall', x: C.W - 60, y: C.GROUND - 40 });
       return e;
     }
     spawnCat() {
@@ -262,8 +305,26 @@
       this.emit('enemy_spawn', { kind: 'cat', x: C.W - 60, y: C.GROUND - 30 });
       return e;
     }
+    /**
+     * Cip and Ciop, the two chipmunks that replace Figaro in the Sensei's runs. Same family of behaviour as the cat
+     * (sprint in, crouch, pounce, up to twice) but small and fragile: one paper or one stomp is enough.
+     */
+    spawnChip(who, dx) {
+      const e = {
+        kind: 'chip', who: who || 'cip', x: C.W + 60 + (dx || 0), y: C.GROUND, vx: 0, vy: 0, w: 30, h: 24, hp: 1, maxHp: 1,
+        state: 'run', st: 0, leaps: 0, flash: 0, iframes: 0, dead: false, deadT: 0, rot: 0, spin: 0, nameT: 2.6,
+        run: 140 + this.diff * 110, jump: 540, seen: false,
+      };
+      this.enemies.push(e);
+      return e;
+    }
+    spawnChips() {
+      const a = this.spawnChip('cip', 0), b = this.spawnChip('ciop', 250);
+      this.emit('enemy_spawn', { kind: 'chip', x: C.W - 60, y: C.GROUND - 30 });
+      return [a, b];
+    }
     enemyBox(e) {
-      if (e.kind === 'oldman') return U.rect(e.x, e.y, e.w - (e.state === 'lunge' ? 0 : 6), e.h);
+      if (isBoss(e)) return U.rect(e.x, e.y, e.w - (e.state === 'lunge' ? 0 : 6), e.h);
       return U.rect(e.x, e.y, e.w, e.h);
     }
     aliveEnemies(kind) {
@@ -284,12 +345,12 @@
             e.skewer = false; e.vx = 320; e.vy = -540; e.spin = -12;
             this.emit('unskewer', { x: e.x, y: e.y - 14 });
           }
-          e.vy += G * dt * (e.kind === 'oldman' ? 0.8 : 1);
+          e.vy += G * dt * (isBoss(e) ? 0.8 : 1);
           e.x += e.vx * dt; e.y += e.vy * dt; e.rot += e.spin * dt;
-          if (e.kind !== 'oldman' && e.y > C.GROUND && e.vy > 0) { e.y = C.GROUND; e.vy *= -0.3; e.vx *= 0.6; e.spin *= 0.5; }
+          if (!isBoss(e) && e.y > C.GROUND && e.vy > 0) { e.y = C.GROUND; e.vy *= -0.3; e.vx *= 0.6; e.spin *= 0.5; }
           continue;
         }
-        if (e.kind === 'oldman') this.tickOldMan(e, dt);
+        if (isBoss(e)) this.tickOldMan(e, dt);
         else this.tickCat(e, dt, ds);
       }
       this.enemies = this.enemies.filter((e) => e.x > -160 && e.x < C.W + 300 && e.deadT < 1.6 && e.y < C.H + 200 && !e.gone);
@@ -299,24 +360,25 @@
       const p = this.player;
       e.life += dt;
       if (e.quoteT > 0) e.quoteT -= dt;
+      if (e.nameT > 0) e.nameT -= dt;
       switch (e.state) {
         case 'enter':
           e.x -= 300 * dt;
           if (e.x <= e.anchor) {
             this.setState(e, 'stalk', U.rand(1.0, 1.9) * (1.15 - this.diff * 0.45));
-            if (!e.greeted) { // first entrance: he announces himself
+            if (!e.greeted && e.greet) { // first entrance: Francone announces himself
               e.greeted = true;
-              this.emit('speech', { text: 'SIGNORI', x: e.x, y: e.y - 150, who: 'oldman', shout: true });
+              this.emit('speech', { text: e.greet, x: e.x, y: e.y - e.h - 54, who: e.who, shout: true });
             }
           }
           break;
         case 'stalk':
           e.x += (e.anchor + Math.sin(e.life * 2.2) * 34 - e.x) * Math.min(1, dt * 7);
-          if (e.life > 22) { this.setState(e, 'leave'); this.emit('oldman_leave', { x: e.x, y: e.y - 60 }); }
+          if (e.life > 22) { this.setState(e, 'leave'); this.emit('oldman_leave', { x: e.x, y: e.y - 60, who: e.who }); }
           else if (e.st > e.next) { this.setState(e, 'windup'); this.emit('warn', { x: e.x, y: e.y - 70 }); }
           break;
         case 'windup':
-          if (e.st > 0.72) { this.setState(e, 'lunge'); this.emit('chomp', { x: e.x, y: e.y - 20 }); }
+          if (e.st > e.windup) { this.setState(e, 'lunge'); this.emit('chomp', { x: e.x, y: e.y - 20 }); }
           break;
         case 'lunge':
           e.x -= e.lungeSpeed * dt;
@@ -335,20 +397,30 @@
     }
     setState(e, s, next) { e.state = s; e.st = 0; if (next != null) e.next = next; }
 
+    /** Figaro and the chipmunks share this routine (`e.kind` is 'cat' or 'chip'). */
     tickCat(e, dt, ds) {
       const p = this.player;
+      const chip = e.kind === 'chip';
       if (e.nameT > 0) e.nameT -= dt;
+      // the Sensei spots the chipmunks as soon as the first one comes into view
+      if (chip && !e.seen && e.x < C.W - 24) {
+        e.seen = true;
+        if (this.chipSayCd <= 0 && this.char.chipLine) {
+          this.chipSayCd = 8;
+          this.emit('speech', { text: this.char.chipLine, x: p.x + 10, y: p.y - 112, who: 'sensei' });
+        }
+      }
       switch (e.state) {
         case 'run': {
           e.x -= (this.scroll + e.run) * dt;
           const dx = e.x - p.x;
-          if (dx < 290 && dx > 60 && e.leaps < 2 && e.st > 0.35) { this.setState(e, 'crouch'); this.emit('meow', { x: e.x, y: e.y - 30 }); }
+          if (dx < 290 && dx > 60 && e.leaps < 2 && e.st > 0.35) { this.setState(e, 'crouch'); this.emit(chip ? 'squeak' : 'meow', { x: e.x, y: e.y - 30 }); }
           break;
         }
         case 'crouch':
           e.x -= this.scroll * dt;
           if (e.st > 0.4) {
-            e.vy = -600; e.vx = -(this.scroll + 230 + this.diff * 90);
+            e.vy = -(e.jump || 600); e.vx = -(this.scroll + 230 + this.diff * 90);
             this.setState(e, 'leap');
           }
           break;
@@ -367,11 +439,11 @@
       if (e.hp <= 0) { this.killEnemy(e, src); return true; }
       e.hits = (e.hits || 0) + 1;
       this.emit('enemy_hit', { kind: e.kind, x: e.x, y: e.y - e.h / 2, src });
-      if (e.kind === 'oldman') {
+      if (isBoss(e)) {
         this.setState(e, 'stun');
         e.vx = src === 'bike' ? 380 : 120;
-        e.quote = OLDMAN_LINES[(e.hits - 1) % OLDMAN_LINES.length]; e.quoteT = 1.3;
-        this.emit('speech', { text: e.quote, x: e.x, y: e.y - 150, who: 'oldman', shout: true });
+        e.quote = e.lines[(e.hits - 1) % e.lines.length]; e.quoteT = 1.3;
+        this.emit('speech', { text: e.quote, x: e.x, y: e.y - e.h - 54, who: e.who, shout: true });
       } else if (e.kind === 'cat') {
         this.emit('hiss', { x: e.x, y: e.y - 20 });
       }
@@ -383,14 +455,14 @@
       this.kills++;
       const pts = C.SCORE[e.kind];
       this.bonus += pts;
-      if (e.kind === 'oldman') {
+      if (isBoss(e)) {
         e.vy = -640; e.vx = 380; e.spin = 9; e.state = 'dead';
         // the last word is his too (a paper's killing blow keeps the alternation going)
-        e.quote = OLDMAN_LINES[(e.hits || 0) % OLDMAN_LINES.length];
-        this.emit('speech', { text: e.quote, x: e.x, y: e.y - 150, who: 'oldman', shout: true });
+        e.quote = e.lines[(e.hits || 0) % e.lines.length];
+        this.emit('speech', { text: e.quote, x: e.x, y: e.y - e.h - 54, who: e.who, shout: true });
       } else if (src === 'pencil') { e.vy = 0; e.vx = 0; e.spin = 0; e.state = 'dead'; e.skewer = true; }
       else { e.vy = -520; e.vx = 220; e.spin = -12; e.state = 'dead'; }
-      this.emit('kill', { kind: e.kind, x: e.x, y: e.y - e.h / 2, pts, src });
+      this.emit('kill', { kind: e.kind, who: e.who, x: e.x, y: e.y - e.h / 2, pts, src });
     }
 
     // ---------------------------------------------------------------- shots
@@ -517,14 +589,14 @@
         if (e.dead) continue;
         const eb = this.enemyBox(e);
         if (swordBox && (U.overlap(swordBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'sword'); continue; }
-        // the pencil skewers Figaro before he reaches the hero ("BESTIACCIA!"); Francone is too big for it
-        if (pencilBox && e.kind === 'cat' && (U.overlap(pencilBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'pencil'); continue; }
+        // the pencil skewers Figaro (and the chipmunks) before they reach the hero ("BESTIACCIA!"); Francone is too big for it
+        if (pencilBox && (e.kind === 'cat' || e.kind === 'chip') && (U.overlap(pencilBox, eb) || U.overlap(pb, eb))) { this.killEnemy(e, 'pencil'); continue; }
         if (!U.overlap(pb, eb)) continue;
         if (bike) {
-          this.damageEnemy(e, e.kind === 'oldman' ? 1 : 99, 'bike');
+          this.damageEnemy(e, isBoss(e) ? 1 : 99, 'bike');
           continue;
         }
-        const stompable = e.kind !== 'oldman';
+        const stompable = !isBoss(e);
         if (stompable && p.vy > 60 && p.prevY <= eb.t + 14) {
           p.vy = -560; p.jumps = 1; p.canCut = false;
           this.emit('stomp', { x: e.x, y: e.y - e.h });
@@ -533,7 +605,7 @@
           this.shieldFlash(e.x, e.y - e.h / 2); // the scudetto simply shrugs it off
         } else if (p.invuln <= 0) {
           this.hurt(e.x);
-          if (e.kind === 'oldman') this.emit('chomp', { x: e.x, y: e.y - 30 });
+          if (isBoss(e)) this.emit('chomp', { x: e.x, y: e.y - 30 });
         }
       }
     }

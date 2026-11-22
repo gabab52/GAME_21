@@ -12,13 +12,14 @@
     cone: { w: 26, h: 32 },
     books: { w: 38, h: 42 },
     buoy: { w: 28, h: 30 },
+    wing: { w: 76, h: 28 },  // a drawing of an airfoil (profilo alare): the obstacle of the "tavola d'acqua". The hit box is its thick front part.
   };
 
   class Spawner {
     constructor(world) {
       this.w = world;
       this.gap = 380;
-      this.cool = { enemy: 9, power: 13, bomb: 22, heart: 40, water: 26, meteor: 30 };
+      this.cool = { enemy: 9, power: 13, bomb: 22, heart: 40, zone: 26, meteor: 30 }; // zone = pool (Tullio) / ice rink (Sensei)
       this.patterns = this.build();
     }
 
@@ -47,9 +48,9 @@
 
     build() {
       const sp = this;
-      const noWater = (w) => w.water.length === 0;
-      // a swim passage is "due" once its cooldown is over: new enemies / power-ups hold off so the field clears for it
-      const waterDue = (w) => w.t > 22 && sp.cool.water <= 0;
+      const noZone = (w) => w.water.length === 0 && w.ice.length === 0;
+      // a swim / skate passage is "due" once its cooldown is over: new enemies / power-ups hold off so the field clears for it
+      const zoneDue = (w) => (w.feat.pool || w.feat.ice) && w.t > 22 && sp.cool.zone <= 0;
       return [
         // ---- pure collectible patterns
         {
@@ -142,7 +143,7 @@
         // ---- swimming passage: the ground turns into water, the hero swaps to swimwear and paddles
         {
           name: 'water',
-          weight: (w) => (waterDue(w) && noWater(w) && !w.power.type && !w.enemies.some((e) => !e.dead) && !w.player.dead ? 30 : 0),
+          weight: (w) => (w.feat.pool && zoneDue(w) && noZone(w) && !w.power.type && !w.enemies.some((e) => !e.dead) && !w.player.dead ? 30 : 0),
           run(x0, w) {
             const s = w.scroll;
             const len = Math.round(s * U.rand(5.5, 7));
@@ -164,17 +165,58 @@
                 x += s * 0.8;
               }
             }
-            sp.cool.water = U.rand(34, 50);
+            sp.cool.zone = U.rand(34, 50);
             // keep Francone and Figaro away until the pool is behind us
             sp.cool.enemy = Math.max(sp.cool.enemy, (len + 500) / s);
             return len + 140;
           },
         },
 
+        // ---- "tavola d'acqua" (Sensei): the road becomes an ice rink; he skates and slides instead of swimming
+        {
+          name: 'rink',
+          weight: (w) => (w.feat.ice && zoneDue(w) && noZone(w) && !w.enemies.some((e) => !e.dead) && !w.player.dead ? 30 : 0),
+          run(x0, w) {
+            const s = w.scroll;
+            const len = Math.round(s * U.rand(6, 8));     // a little longer than the pool: you need room to slide
+            const zx = x0 + 60;
+            w.ice.push({ x: zx, w: len });
+            // entry grace, then airfoil profiles with arcs of coins over them, coin rows to glide through, banknote trails
+            let x = zx + s * 1.1;
+            while (x < zx + len - s * 0.8) {
+              const roll = Math.random();
+              if (roll < 0.55) {
+                sp.obst('wing', x);   // only airfoil profiles on the rink (no cones)
+                sp.arc(x + 36, 5, 30, GY - 34, 88);
+                x += s * U.rand(0.9, 1.15) + 120;
+              } else if (roll < 0.8) {
+                sp.coinRow(x, GY - 26, 7, 32);
+                x += 7 * 32 + s * 0.3;
+              } else {
+                for (let i = 0; i < 3; i++) sp.note(x + i * 46, GY - 40 - Math.sin(i * 1.6) * 30);
+                x += s * 0.8;
+              }
+            }
+            sp.cool.zone = U.rand(34, 50);
+            sp.cool.enemy = Math.max(sp.cool.enemy, (len + 500) / s);   // Francone and the chipmunks wait until the rink is behind us
+            return len + 140;
+          },
+        },
+
         // ---- enemy encounters
         {
+          name: 'chips',
+          // Cip e Ciop come as a pair, one behind the other. They replace Figaro in the Sensei's runs.
+          weight: (w) => (w.feat.chips && w.t > 10 && noZone(w) && !zoneDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('chip') === 0 ? 2.2 + 2 * w.diff : 0),
+          run(x0, w) {
+            w.spawnChips();
+            sp.cool.enemy = U.rand(5, 8) * (1 - 0.4 * w.diff) + 1.5;
+            return 300;
+          },
+        },
+        {
           name: 'figaro',
-          weight: (w) => (w.t > 10 && noWater(w) && !waterDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('cat') < 1 + (w.diff > 0.6 ? 1 : 0) ? 2.2 + 2 * w.diff : 0),
+          weight: (w) => (w.feat.cat && w.t > 10 && noZone(w) && !zoneDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('cat') < 1 + (w.diff > 0.6 ? 1 : 0) ? 2.2 + 2 * w.diff : 0),
           run(x0, w) {
             w.spawnCat();
             sp.cool.enemy = U.rand(5, 8) * (1 - 0.4 * w.diff);
@@ -184,7 +226,7 @@
         },
         {
           name: 'oldMan',
-          weight: (w) => (w.t > 22 && noWater(w) && !waterDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('oldman') < 1 ? 1.8 + 1.5 * w.diff : 0),
+          weight: (w) => (w.t > 22 && noZone(w) && !zoneDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('oldman') < 1 && w.aliveEnemies('hall') < 1 ? 1.8 + 1.5 * w.diff : 0),
           run(x0, w) {
             // make sure the player can actually fight: drop paper sheets right before him
             const n = w.ammo < 4 ? 5 : w.ammo < 8 ? 3 : 0;
@@ -195,11 +237,25 @@
           },
         },
 
+        {
+          // Mr. Hall: the Sensei's villain, a younger Francone. Never together with Francone (one boss at a time).
+          name: 'hall',
+          weight: (w) => (w.feat.hall && w.t > 26 && noZone(w) && !zoneDue(w) && sp.cool.enemy <= 0 && w.aliveEnemies('hall') < 1 && w.aliveEnemies('oldman') < 1 ? 1.8 + 1.5 * w.diff : 0),
+          run(x0, w) {
+            // make sure the player can fight: drop paper sheets right before him
+            const n = w.ammo < 4 ? 5 : w.ammo < 8 ? 3 : 0;
+            for (let i = 0; i < n; i++) sp.item('paper', x0 + i * 44, GY - 24);
+            w.spawnHall();
+            sp.cool.enemy = U.rand(9, 14) * (1 - 0.4 * w.diff);
+            return Math.max(240, n * 44 + 100);
+          },
+        },
+
         // ---- RSE meteorite: a rock with "RSE" on it comes down on the hero's position; dodge it sideways
         {
           name: 'meteor',
           // (not held back by a pending swim passage: a meteor is a quick event and never overlaps the pool itself)
-          weight: (w) => (w.t > 28 && noWater(w) && sp.cool.meteor <= 0 && w.meteors.length === 0 && !w.player.dead
+          weight: (w) => (w.feat.meteor && w.t > 28 && noZone(w) && sp.cool.meteor <= 0 && w.meteors.length === 0 && !w.player.dead
             && !w.enemies.some((e) => !e.dead && (e.state === 'windup' || e.state === 'lunge')) ? 2.6 + 2 * w.diff : 0),
           run(x0, w) {
             w.spawnMeteor();
@@ -211,10 +267,11 @@
         // ---- power-ups and consumables
         {
           name: 'powerUp',
-          weight: (w) => (!w.power.type && noWater(w) && !waterDue(w) && sp.cool.power <= 0 && w.t > 10 ? 2.2 : 0),
+          weight: (w) => (!w.power.type && noZone(w) && !zoneDue(w) && sp.cool.power <= 0 && w.t > 10 ? (sp.firstPowerDone ? 2.2 : w.char.firstPowerWeight || 2.2) : 0),
           run(x0, w) {
-            // the very first power-up of a run is always the pencil (so it never goes unnoticed); after that it's a weighted draw
-            const kind = !sp.firstPowerDone ? 'pencil'
+            // the very first power-up of a run is the character's signature one (Tullio: the pencil, Sensei: the passeggino), so it
+            // never goes unnoticed; after that it's a weighted draw
+            const kind = !sp.firstPowerDone ? (w.char.firstPower || 'pencil')
               : U.wpick([{ w: 0.28, k: 'bike' }, { w: 0.22, k: 'skis' }, { w: 0.16, k: 'sword' }, { w: 0.15, k: 'shield' }, { w: 0.35, k: 'pencil' }]).k;
             sp.firstPowerDone = true;
             const pw = 170; sp.plat(x0 + 70, 96, pw);

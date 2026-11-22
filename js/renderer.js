@@ -324,6 +324,62 @@
       const per2 = 110, o2 = (d * 1.0) % per2;
       for (let x = -o2; x < C.W; x += per2) { ctx.fillRect(x + 20, GY + 62, 26, 4); ctx.fillRect(x + 70, GY + 78, 14, 3); }
       this.water(w, pal, time);
+      this.ice(w, pal, time);
+    }
+
+    /**
+     * "Tavola d'acqua" (Sensei): the road turns into a glossy ice rink with skate trails and sparkles, rink boards at both
+     * ends and a signpost at the entrance.
+     */
+    ice(w, pal, time) {
+      if (!w.ice.length) return;
+      const ctx = this.ctx, top = GY;
+      const night = pal.star;
+      for (const z of w.ice) {
+        if (z.x > C.W + 200 || z.x + z.w < -20) continue;
+        const x0 = Math.max(-10, z.x), x1 = Math.min(C.W + 10, z.x + z.w);
+        const g = ctx.createLinearGradient(0, top, 0, C.H);
+        g.addColorStop(0, night > 0.5 ? '#8fb8e8' : '#e6f8ff'); g.addColorStop(0.35, night > 0.5 ? '#5f8fd0' : '#aee2f6'); g.addColorStop(1, night > 0.5 ? '#2c4a8c' : '#6fc0e6');
+        ctx.fillStyle = g; ctx.fillRect(x0, top, x1 - x0, C.H - top);
+        // bright top edge
+        ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(x0, top, x1 - x0, 3);
+        ctx.fillStyle = 'rgba(40,120,180,0.25)'; ctx.fillRect(x0, top + 3, x1 - x0, 3);
+        // skate trails (long curved scratches that scroll with the rink) and drifting glints
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.6;
+        for (let i = 0; i < Math.floor(z.w / 120); i++) {
+          const px = z.x + 40 + i * 120 + hash(i * 5 + 2) * 50, py = GY + 16 + (i % 4) * 17;
+          if (px > x1 || px + 90 < x0) continue;
+          ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo(px + 40, py - 5 + hash(i) * 10, px + 92, py + 2); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(40,120,180,0.28)'; ctx.lineWidth = 1.2;
+        for (let i = 0; i < Math.floor(z.w / 150); i++) {
+          const px = z.x + 90 + i * 150 + hash(i * 9 + 4) * 60, py = GY + 24 + (i % 3) * 20;
+          if (px > x1 || px + 120 < x0) continue;
+          ctx.beginPath(); ctx.moveTo(px, py + 4); ctx.quadraticCurveTo(px + 60, py - 8, px + 124, py + 3); ctx.stroke();
+        }
+        for (let i = 0; i < Math.floor(z.w / 70); i++) {
+          const px = z.x + 20 + i * 70 + hash(i * 7 + 1) * 40;
+          if (px < x0 || px > x1) continue;
+          const k = 0.5 + 0.5 * Math.sin(time * 4 + i * 1.7);
+          ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.6 * k})`;
+          Art.star(ctx, px, GY + 14 + ((i * 37) % 70), 2 + 2.2 * k, 0); ctx.fill();
+        }
+        // rink boards at both ends
+        ctx.fillStyle = '#f4f9ff'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 2;
+        [z.x - 6, z.x + z.w - 2].forEach((bx) => { if (bx > -20 && bx < C.W + 10) { Art.rr(ctx, bx, GY - 14, 8, 26, 3); ctx.fill(); ctx.stroke(); } });
+        // the signpost at the entrance
+        if (z.x > -160 && z.x < C.W + 80) {
+          ctx.save(); ctx.translate(z.x - 26, GY + 4);
+          ctx.fillStyle = '#7a4a2a'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 2.4;
+          ctx.fillRect(-3, -62, 6, 62); ctx.strokeRect(-3, -62, 6, 62);
+          Art.rr(ctx, -74, -98, 148, 40, 8); ctx.fillStyle = '#1f6fd6'; ctx.fill(); ctx.stroke();
+          Art.rr(ctx, -69, -93, 138, 30, 5); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.font = '700 16px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText("TAVOLA D'ACQUA", 0, -78);
+          ctx.textBaseline = 'alphabetic';
+          ctx.restore();
+        }
+      }
     }
 
     platforms(w) {
@@ -338,15 +394,15 @@
         ctx.fillStyle = `rgba(0,0,0,${0.28 * k})`; ctx.beginPath(); ctx.ellipse(x, GY + 4, rw * k, 4.5 * k, 0, 0, 7); ctx.fill();
       };
       const p = w.player;
-      if (!p.dead && !p.swim) sh(p.x, p.plat ? GY : p.y, w.power.type === 'bike' ? 40 : 18);
-      for (const e of w.enemies) if (!e.dead) sh(e.x, e.y, e.kind === 'oldman' ? 26 : 18);
+      if (!p.dead && !p.swim) sh(p.x, p.plat ? GY : p.y, w.power.type === 'bike' ? (w.charId === 'sensei' ? 50 : 40) : 18);
+      for (const e of w.enemies) if (!e.dead) sh(e.x, e.y, e.kind === 'oldman' || e.kind === 'hall' ? 26 : e.kind === 'chip' ? 12 : 18);
     }
 
     obstacles(w, time) {
       const ctx = this.ctx;
       for (const o of w.obstacles) {
         ctx.save(); ctx.translate(o.x + o.w / 2, o.y);
-        if (o.kind === 'cone') Art.cone(ctx); else if (o.kind === 'buoy') Art.buoy(ctx, time + o.x * 0.01); else Art.books(ctx);
+        if (o.kind === 'cone') Art.cone(ctx); else if (o.kind === 'buoy') Art.buoy(ctx, time + o.x * 0.01); else if (o.kind === 'wing') Art.wingProfile(ctx, time + o.x * 0.01); else Art.books(ctx);
         ctx.restore();
       }
     }
@@ -360,14 +416,15 @@
       for (const it of w.items) {
         const bob = Math.sin(time * 3 + it.ph) * 4;
         ctx.save(); ctx.translate(it.x, it.y + bob);
-        const halo = { paper: '90,140,255', bomb: '255,90,90', heart: '255,100,140', bike: '244,162,97', skis: '76,201,240', sword: '255,209,102', shield: '240,180,41', pencil: '255,143,184' }[it.kind];
+        const halo = ((w.charId === 'sensei' && { bike: '255,158,196', sword: '217,160,91', shield: '230,57,70' }) || {})[it.kind]
+          || { paper: '90,140,255', bomb: '255,90,90', heart: '255,100,140', bike: '244,162,97', skis: '76,201,240', sword: '255,209,102', shield: '240,180,41', pencil: '255,143,184' }[it.kind];
         const rg = ctx.createRadialGradient(0, 0, 4, 0, 0, 34);
         rg.addColorStop(0, `rgba(${halo},0.42)`); rg.addColorStop(1, `rgba(${halo},0)`);
         ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, 0, 34, 0, 7); ctx.fill();
         if (it.kind === 'paper') { ctx.rotate(Math.sin(time * 2 + it.ph) * 0.15); Art.paper(ctx, time, 1.25); }
         else if (it.kind === 'bomb') Art.bombItem(ctx, time);
         else if (it.kind === 'heart') Art.heart(ctx, time, 1.1);
-        else Art.powerBadge(ctx, it.kind, time);
+        else Art.powerBadge(ctx, it.kind, time, w.charId);
         ctx.restore();
       }
     }
@@ -383,6 +440,12 @@
         if (e.kind === 'oldman') {
           ctx.scale(-1, 1);
           Art.oldman(ctx, { t: time + e.x * 0.01, state: e.state });
+        } else if (e.kind === 'hall') {
+          ctx.scale(-1, 1);
+          Art.hall(ctx, { t: time + e.x * 0.01, state: e.state });
+        } else if (e.kind === 'chip') {
+          ctx.scale(-1, 1);
+          Art.chip(ctx, { t: time + (e.who === 'ciop' ? 0.2 : 0), state: e.state, who: e.who, hiss: e.flash > 0 });
         } else {
           ctx.scale(-1, 1);
           Art.cat(ctx, { t: time, state: e.state, hiss: e.flash > 0 });
@@ -391,8 +454,9 @@
 
         if (e.dead) continue;
         // little hp pips so the player can see progress
-        if (e.maxHp > 1 && !(e.kind === 'oldman' && e.state === 'enter')) {
-          const n = e.maxHp, pw = 9, tw = n * pw + (n - 1) * 3, top = e.y - e.h - (e.kind === 'oldman' ? 22 : 30);
+        const boss = e.kind === 'oldman' || e.kind === 'hall';   // Francone and Mr. Hall
+        if (e.maxHp > 1 && !(boss && e.state === 'enter')) {
+          const n = e.maxHp, pw = 9, tw = n * pw + (n - 1) * 3, top = e.y - e.h - (boss ? 22 : 30);
           for (let i = 0; i < n; i++) {
             ctx.fillStyle = i < e.hp ? '#ff4d6d' : 'rgba(0,0,0,0.35)';
             ctx.strokeStyle = Art.OUT; ctx.lineWidth = 1.5;
@@ -400,11 +464,13 @@
           }
         }
         if (e.kind === 'cat' && e.nameT > 0) this.tag(e.x, e.y - 58, 'FIGARO', Math.min(1, e.nameT));
-        if (e.kind === 'oldman' && e.state === 'windup') {
-          const blink = Math.floor(time * 14) % 2;
+        if (e.kind === 'chip' && e.nameT > 0) this.tag(e.x, e.y - 46, e.who.toUpperCase(), Math.min(1, e.nameT));
+        if (e.kind === 'hall' && e.nameT > 0 && e.state !== 'windup') this.tag(e.x, e.y - e.h - 36, 'MR. HALL', Math.min(1, e.nameT));
+        if (boss && e.state === 'windup') {
+          const blink = Math.floor(time * 14) % 2, top = e.y - e.h - 68;
           ctx.fillStyle = blink ? '#ff3b3b' : '#ffd166'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 2.5;
-          ctx.beginPath(); ctx.moveTo(e.x - 8, e.y - 164); ctx.lineTo(e.x + 20, e.y - 164); ctx.lineTo(e.x + 6, e.y - 134); ctx.closePath(); ctx.fill(); ctx.stroke();
-          ctx.fillStyle = '#1c2033'; ctx.font = '800 17px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', e.x + 6, e.y - 143);
+          ctx.beginPath(); ctx.moveTo(e.x - 8, top); ctx.lineTo(e.x + 20, top); ctx.lineTo(e.x + 6, top + 30); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#1c2033'; ctx.font = '800 17px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', e.x + 6, top + 21);
         }
       }
     }
@@ -462,6 +528,8 @@
     // ================================================================= player
     player(w, time) {
       const ctx = this.ctx, p = w.player, type = w.power.type;
+      const sen = w.charId === 'sensei';
+      let showName = false; // the little girl's name tag, for the first seconds of the passeggino
       ctx.save();
       ctx.translate(p.x, p.y);
       if (p.invuln > 0 && !p.dead && !(type === 'bike' || type === 'sword' || type === 'shield') && Math.floor(time * 20) % 2) ctx.globalAlpha = 0.35;
@@ -489,12 +557,16 @@
       if (type === 'bike') {
         const tilt = p.onGround ? 0 : U.clamp(-p.vy / 1500, -0.3, 0.3) * -1;
         ctx.translate(-27, 0); ctx.rotate(p.onGround ? 0 : -U.clamp(-p.vy / 2200, -0.2, 0.28)); ctx.translate(27, 0);
-        Art.bike(ctx, { t: time, expr: p.dead ? 'dead' : p.hurtT > 0 ? 'hurt' : 'happy', throwP, raise });
+        const bexpr = p.dead ? 'dead' : p.hurtT > 0 ? 'hurt' : 'happy';
+        if (sen) { ctx.translate(12, 0); ctx.scale(0.95, 0.95); Art.stroller(ctx, { t: time, expr: bexpr, throwP, raise }); showName = w.power.dur - w.power.t < 3; } // the passeggino
+        else Art.bike(ctx, { t: time, expr: bexpr, throwP, raise });
       } else {
         ctx.scale(1.15, 1.15); // the hero is drawn a touch larger than its hitbox so he always reads clearly
         // costume change: the old outfit is shown for the first half of the puff, the new one for the second
-        const swimLook = p.changeT > 0.2 ? !p.swim : p.swim;
-        if (swimLook) {
+        const swimLook = !sen && (p.changeT > 0.2 ? !p.swim : p.swim);
+        if (sen) {
+          Art.sensei(ctx, { t: p.animT, mode: type === 'skis' ? 'skis' : type === 'sword' ? 'staff' : 'run', air: !p.onGround, vy: p.vy, expr, blink, throwP, raise, pencil: type === 'pencil', runRate: 11 + w.scroll / 70, skate: p.changeT > 0.2 ? !p.skate : p.skate });
+        } else if (swimLook) {
           const pitch = U.clamp(p.vy / 1100, -0.5, 0.55);
           ctx.translate(0, -14); ctx.rotate(pitch); ctx.translate(0, 14);
           Art.heroSwim(ctx, { t: p.animT, expr: expr === 'focus' ? 'normal' : expr, throwP });
@@ -508,14 +580,19 @@
       // Scudetto: a giallorosso force field with little shields orbiting it
       if (type === 'shield' && !p.dead) {
         const cy = p.swim ? -16 : -34, R = p.swim ? 42 : 52;
+        // Scudetto (Tullio) is giallorosso; the Sensei's falce e martello is red and gold
+        const col = sen ? { fill: '230,57,70', ring: '#ffd23f', dash: '#b3202d' } : { fill: '247,197,43', ring: '#f0b429', dash: '#a4161a' };
         const rg = ctx.createRadialGradient(0, cy, R * 0.45, 0, cy, R);
-        rg.addColorStop(0, 'rgba(247,197,43,0.04)'); rg.addColorStop(1, 'rgba(247,197,43,0.38)');
+        rg.addColorStop(0, `rgba(${col.fill},0.04)`); rg.addColorStop(1, `rgba(${col.fill},0.38)`);
         ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, cy, R, 0, 7); ctx.fill();
-        ctx.lineWidth = 3; ctx.strokeStyle = '#f0b429'; ctx.beginPath(); ctx.arc(0, cy, R, 0, 7); ctx.stroke();
-        ctx.strokeStyle = '#a4161a'; ctx.setLineDash([14, 14]); ctx.lineDashOffset = -time * 40; ctx.beginPath(); ctx.arc(0, cy, R - 4, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.lineWidth = 3; ctx.strokeStyle = col.ring; ctx.beginPath(); ctx.arc(0, cy, R, 0, 7); ctx.stroke();
+        ctx.strokeStyle = col.dash; ctx.setLineDash([14, 14]); ctx.lineDashOffset = -time * 40; ctx.beginPath(); ctx.arc(0, cy, R - 4, 0, 7); ctx.stroke(); ctx.setLineDash([]);
         for (let i = 0; i < 3; i++) {
           const a = time * 2.2 + (i * Math.PI * 2) / 3;
-          ctx.save(); ctx.translate(Math.cos(a) * R, cy + Math.sin(a) * R * 0.8); ctx.scale(0.42, 0.42); Art.scudetto(ctx); ctx.restore();
+          ctx.save(); ctx.translate(Math.cos(a) * R, cy + Math.sin(a) * R * 0.8);
+          if (sen) { ctx.scale(0.5, 0.5); ctx.fillStyle = '#e63946'; ctx.strokeStyle = Art.OUT; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 21, 0, 7); ctx.fill(); ctx.stroke(); Art.hammerSickle(ctx); }
+          else { ctx.scale(0.42, 0.42); Art.scudetto(ctx); }
+          ctx.restore();
         }
       }
       // costume-change puff of smoke
@@ -529,6 +606,9 @@
         ctx.beginPath(); ctx.arc(0, -28, 20 * r + 6, 0, 7); ctx.fill();
       }
       ctx.restore();
+
+      // "Cecilia": the name of the little girl in the passeggino, floating above her for the first seconds
+      if (showName && !p.dead) this.tag(p.x + 46, p.y - 90, 'Cecilia', Math.min(1, (3 - (w.power.dur - w.power.t)) * 2));
 
       // armed bomb floating above the head
       if (w.bombFuse > 0) {
@@ -579,7 +659,7 @@
         ctx.globalAlpha = U.clamp(b.life / 0.3, 0, 1);
         // shout = Francone yelling: big red capitals in a cream bubble that jolts a little
         const shout = !!b.shout, bh = shout ? 40 : 30;
-        ctx.font = shout ? '700 22px Bungee, Impact, "Arial Black", sans-serif' : '700 15px Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center';
+        ctx.font = shout ? '700 22px Bungee, Impact, "Arial Black", sans-serif' : b.key === 'sensei' ? '700 17px Fredoka, system-ui, sans-serif' : '700 15px Fredoka, system-ui, sans-serif'; ctx.textAlign = 'center';
         const tw = ctx.measureText(b.str).width + (shout ? 30 : 20);
         const jx = shout ? Math.sin(b.life * 70) * 1.6 : 0;
         const x = U.clamp(b.x, tw / 2 + 6, C.W - tw / 2 - 6) + jx, y = b.y;

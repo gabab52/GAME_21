@@ -9,7 +9,11 @@
       const s = w.scroll;
       const inp = { left: false, right: false, down: false, jumpHeld: false, jumpPressed: false, throwPressed: false, bombPressed: false };
       const home = 190;
-      if (p.x < home - 15) inp.right = true; else if (p.x > home + 15) inp.left = true;
+      if (p.skate && p.onGround) {
+        // on the ice he keeps gliding: steer the velocity towards "home", not the position
+        const want = Math.max(-160, Math.min(160, (home - p.x) * 2.2));
+        if (p.vx < want - 25) inp.right = true; else if (p.vx > want + 25) inp.left = true;
+      } else if (p.x < home - 15) inp.right = true; else if (p.x > home + 15) inp.left = true;
       // RSE meteorite: step out of the target zone, and don't wander back into it until it has landed
       let dodge = 0, hold = false;
       for (const m of w.meteors) {
@@ -32,10 +36,10 @@
       for (const e of w.enemies) {
         if (e.dead) continue;
         const dx = e.x - p.x;
-        if (e.kind === 'oldman') {
+        if (e.kind === 'oldman' || e.kind === 'hall') {
           if (e.state === 'lunge' && dx > -40 && dx < 240) jump = true;
           else if (e.state !== 'enter' && e.state !== 'leave') fight = true;
-        } else if (e.kind === 'cat') {
+        } else if (e.kind === 'cat' || e.kind === 'chip') {
           if (dx > -30 && dx < (e.state === 'leap' ? 150 : 120)) jump = true;
           if (e.state === 'run' && dx > 250) fight = true;
         }

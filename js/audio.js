@@ -103,6 +103,14 @@
     // Matita: quick pencil-scribble sound
     scribble() { for (let i = 0; i < 6; i++) noise({ t: 0.05, f: 3200 + (i % 2) * 1400, filter: 'bandpass', vol: 0.22, delay: i * 0.055 }); tone({ f: N(19), t: 0.12, type: 'triangle', vol: 0.2, delay: 0.34 }); },
     pierce() { noise({ t: 0.1, f: 2600, f2: 900, filter: 'bandpass', vol: 0.3 }); tone({ f: 900, f2: 300, t: 0.1, type: 'square', vol: 0.12 }); },
+    // Cip e Ciop: two quick chipmunk squeaks
+    squeak() { tone({ f: 1500, f2: 2300, t: 0.07, type: 'square', vol: 0.12 }); tone({ f: 1700, f2: 2600, t: 0.08, type: 'square', vol: 0.12, delay: 0.1 }); },
+    // the little girl in the passeggino
+    giggle() { [0, 4, 0, 5, 0, 7].forEach((s, i) => tone({ f: N(24 + s), t: 0.06, type: 'sine', vol: 0.2, delay: i * 0.06 })); },
+    // "tavola d'acqua": skates on, a glassy chime and a blade swish
+    iceEnter() { noise({ t: 0.3, f: 6000, f2: 2500, filter: 'highpass', vol: 0.22 }); [19, 24, 28, 31].forEach((s, i) => tone({ f: N(s), t: 0.18, type: 'sine', vol: 0.18, delay: 0.05 + i * 0.07 })); },
+    // Sensei meets a staff / hammer and sickle: a wooden whack
+    whack() { tone({ f: 200, f2: 90, t: 0.12, type: 'square', vol: 0.3 }); noise({ t: 0.1, f: 1200, filter: 'bandpass', vol: 0.3 }); },
   };
 
   function play(name) {
@@ -111,14 +119,14 @@
     if (fn) fn();
   }
 
-  /** Italian voice line. opts: { rate, pitch, soft } — `soft` skips the line if another one is still being spoken (so rapid hits don't cut each other off). */
+  /** Voice line (Italian unless opts.lang says otherwise). opts: { rate, pitch, soft, lang } — `soft` skips the line if another one is still being spoken (so rapid hits don't cut each other off). */
   function say(text, opts) {
     try {
       if (muted || !window.speechSynthesis) return;
       const o = opts || {};
       if (o.soft && window.speechSynthesis.speaking) return;
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'it-IT'; u.rate = o.rate || 0.85; u.pitch = o.pitch == null ? 0.5 : o.pitch; u.volume = 1;
+      u.lang = o.lang || 'it-IT'; u.rate = o.rate || 0.85; u.pitch = o.pitch == null ? 0.5 : o.pitch; u.volume = 1;
       if (!o.soft) window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
     } catch (_) {}

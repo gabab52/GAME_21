@@ -23,7 +23,8 @@
   function press(name) {
     if (HELD.includes(name)) held[name] = true;
     if (EDGE.includes(name)) edge[name] = true;
-    if (name === 'pause' || name === 'mute' || name === 'confirm') fire(name);
+    // one-shot UI events (the game decides by its current screen what they mean: pause, mute, OK, and ←/→/jump in the menus)
+    if (name === 'pause' || name === 'mute' || name === 'confirm' || name === 'left' || name === 'right' || name === 'jump') fire(name);
     fire('any');
   }
   function release(name) {
